@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html data-theme="winter">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sensor Panel</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        overflow: hidden;
+      }
+
+      /* 16:9 cover math */
+      .video-cover iframe {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+
+        /* Maintain aspect ratio */
+        width: 177.78vh; /* 16 / 9 * 100 */
+        height: 100vh;
+
+        min-width: 100vw;
+        min-height: 56.25vw; /* 9 / 16 * 100 */
+
+        transform: translate(-50%, -50%);
+        border: 0;
+      }
+    </style>
+
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body>
+    <div class="video-cover fixed inset-0 overflow-hidden">
+      <div id="player"></div>
+    </div>
+
+    <div class="fixed right-6 top-1/2 -translate-y-1/2 z-50 pointer-events-none">
+      <div class="flex items-center gap-6
+                  bg-base-100/50 backdrop-blur
+                  rounded-2xl shadow-md
+                  px-6 py-3">
+
+        <!-- CPU Power (RADIAL) -->
+        <div class="flex flex-col items-center">
+          <div
+            class="radial-progress text-primary"
+            style="--value:57; --size:3.6rem; --thickness:6px;"
+            role="progressbar">
+            <span id="cpu_power" class="text-sm font-semibold text-base-content/80">--w</span>
+          </div>
+          <span class="text-xs font-semibold text-base-content/70 mt-1">Power</span>
+        </div>
+
+        <!-- CPU STAT -->
+        <div class="stat">
+          <div class="stat-figure text-primary">
+            <!-- CPU icon -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              class="inline-block size-12 stroke-current">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2M6 6h12v12H6z" />
+            </svg>
+          </div>
+
+          <div class="stat-title font-semibold">CPU</div>
+
+          <div class="stat-value">
+            <span id="cpu_temp">--</span>
+            <span class="text-sm align-top">°C</span>
+          </div>
+
+          <div class="stat-desc font-semibold">
+            RAM 24gb/32gb
+          </div>
+
+          <progress
+            id="cpu_progress"
+            class="progress progress-primary w-32"
+            value="39"
+            max="95">
+          </progress>
+        </div>
+
+        <!-- GPU HOTSPOT (RADIAL) -->
+        <div class="flex flex-col items-center">
+          <div
+            id="gpu_hotspot"
+            class="radial-progress text-primary"
+            style="--value:57; --size:3.6rem; --thickness:6px;"
+            role="progressbar">
+            <span id="gpu_hotspot_text" class="text-sm font-semibold text-base-content/80">--°</span>
+          </div>
+          <span class="text-xs font-semibold text-base-content/70 mt-1">Hotspot</span>
+        </div>
+
+        <!-- GPU STAT -->
+        <div class="stat">
+          <div class="stat-figure text-primary">
+            <!-- GPU icon -->
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              class="inline-block size-12 stroke-current">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 6h16v8H4zM6 14v4h4v-4M14 14v4h4v-4M9 10h.01M12 10h.01M15 10h.01" />
+            </svg>
+          </div>
+
+          <div class="stat-title">GPU</div>
+
+          <div class="stat-value">
+            <span id="gpu_edge">--</span>
+            <span class="align-top">°C</span>
+          </div>
+
+          <div id="gpu_desc" class="stat-desc">
+            VRAM --°C · --W
+          </div>
+
+          <progress
+            id="gpu_progress"
+            class="progress progress-primary w-32"
+            value="00"
+            max="110">
+          </progress>
+        </div>
+
+      </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+      let player;
+      let loopTimer;
+      const RESTART_THRESHOLD = 0.5; // seconds before end
+
+      function onYouTubeIframeAPIReady() {
+        player = new YT.Player('player', {
+          videoId: 'AKfsikEXZHM',
+          playerVars: {
+            autoplay: 1,
+            mute: 1,
+            controls: 1,
+            rel: 0,
+            playsinline: 1,
+            origin: 'http://localhost:3000'
+          },
+          events: {
+            onReady: onPlayerReady,
+            onStateChange: onPlayerStateChange
+          }
+        });
+      }
+
+      function onPlayerReady(e) {
+        e.target.playVideo();
+        startLoopGuard();
+      }
+
+      function onPlayerStateChange(e) {
+        if (e.data === YT.PlayerState.PLAYING) {
+          startLoopGuard();
+        }
+
+        if (e.data === YT.PlayerState.ENDED) {
+          restart();
+        }
+      }
+
+      function startLoopGuard() {
+        stopLoopGuard();
+        loopTimer = setInterval(() => {
+          const duration = player.getDuration();
+          const current = player.getCurrentTime();
+
+          if (duration > 0 && duration - current <= RESTART_THRESHOLD) {
+            restart();
+          }
+        }, 100);
+      }
+
+      function stopLoopGuard() {
+        if (loopTimer) {
+          clearInterval(loopTimer);
+          loopTimer = null;
+        }
+      }
+
+      function restart() {
+        stopLoopGuard();
+        player.seekTo(0.25, true);
+        player.playVideo();
+      }
+
+      const API_URL = "/metrics"
+      const POLL_INTERVAL_MS = 1000
+
+      async function fetchSensors() {
+        try {
+          const res = await fetch(API_URL, { cache: "no-store" })
+          if (!res.ok) throw new Error("bad response")
+          return await res.json()
+        } catch (err) {
+          console.warn("sensor fetch failed", err)
+          return null
+        }
+      }
+
+      function updateUI(data) {
+        if (!data) return
+
+        // CPU
+        const cpuTemp = Math.round(data.cpu.temp_c)
+        document.getElementById("cpu_temp").textContent = cpuTemp
+        document.getElementById("cpu_progress").value = cpuTemp
+
+        // GPU
+        const gpuEdge = Math.round(data.gpu.edge_c)
+        const gpuHotspot = Math.round(data.gpu.hotspot_c)
+        const gpuVram = Math.round(data.gpu.vram_c)
+        const gpuPower = Math.round(data.gpu.power_w)
+
+        document.getElementById("gpu_edge").textContent = gpuEdge
+        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVram}°C · ${gpuPower}W`
+
+        document.getElementById("gpu_progress").value = gpuHotspot
+
+        const radial = document.getElementById("gpu_hotspot")
+        radial.style.setProperty("--value", gpuHotspot)
+        document.getElementById("gpu_hotspot_text").textContent =
+          `${gpuHotspot}°`
+      }
+
+      async function poll() {
+        const data = await fetchSensors()
+        updateUI(data)
+      }
+
+      setInterval(poll, POLL_INTERVAL_MS)
+      poll()
+    </script>
+  </body>
+</html>
