@@ -17,7 +17,7 @@ func main() {
 
 	// Serve the sensor panel HTML
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendFile("./sensorpanel.html")
+		return c.SendFile("./public/index.html")
 	})
 
 	app.Get("/metrics", SensorPanelMetrics)
@@ -61,7 +61,7 @@ func sensorScriptPath() (string, error) {
 	}
 
 	// Script assumed to live at project root
-	scriptPath := filepath.Join(cwd, "sensor_panel_metrics.sh")
+	scriptPath := filepath.Join(cwd, "scripts/metrics_collector.sh")
 
 	// Ensure the script exists
 	if _, err := os.Stat(scriptPath); err != nil {
