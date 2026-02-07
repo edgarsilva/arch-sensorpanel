@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
+
+	"sensorpanel/handlers"
+	"sensorpanel/internal/sensors"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -15,61 +13,19 @@ import (
 func main() {
 	app := fiber.New()
 
+	cpuSampler := sensors.NewCPUUtilSampler(time.Second)
+	memSampler := sensors.NewMemorySampler()
+
+	// create haldler with cpu sampler dep injected
+	metricsHandler := handlers.NewMetricsHandler(cpuSampler, memSampler)
+
 	// Serve the sensor panel HTML
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendFile("./public/index.html")
 	})
 
-	app.Get("/metrics", SensorPanelMetrics)
+	app.Get("/metrics", metricsHandler.GetMetrics)
 
 	log.Println("Listening on http://localhost:9070")
 	log.Fatal(app.Listen(":9070"))
-}
-
-func SensorPanelMetrics(c *fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
-	defer cancel()
-
-	scriptPath, err := sensorScriptPath()
-	if err != nil {
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, scriptPath)
-
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println(err)
-		return fiber.NewError(
-			fiber.StatusInternalServerError,
-			"failed to collect sensor metrics",
-		)
-	}
-
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.Send(output)
-}
-
-func sensorScriptPath() (string, error) {
-	// Resolve current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fiber.NewError(
-			fiber.StatusInternalServerError,
-			"failed to resolve working directory",
-		)
-	}
-
-	// Script assumed to live at project root
-	scriptPath := filepath.Join(cwd, "scripts/metrics_collector.sh")
-
-	// Ensure the script exists
-	if _, err := os.Stat(scriptPath); err != nil {
-		return "", fiber.NewError(
-			fiber.StatusInternalServerError,
-			"sensor metrics script not found",
-		)
-	}
-
-	return scriptPath, nil
 }

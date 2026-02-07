@@ -134,7 +134,11 @@ HUD OVERLAY
 
 Recommended theme for kiosk use:
 
+```html
+
 <html data-theme="winter">
+
+```
 
 ---------------------------------------------------------------------
 
