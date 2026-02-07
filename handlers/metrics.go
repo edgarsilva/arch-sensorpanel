@@ -18,6 +18,7 @@ type MetricsResponse struct {
 	CPU struct {
 		TempC   float64 `json:"temp_c"`
 		UtilPct float64 `json:"util_pct"`
+		PowerW  float64 `json:"power_w"`
 	} `json:"cpu"`
 
 	RAM struct {
@@ -38,11 +39,12 @@ type MetricsResponse struct {
 
 type MetricsHandler struct {
 	cpuSampler *sensors.CPUUtilSampler
+	cpuPower   *sensors.CPUPowerSampler
 	memSampler *sensors.MemorySampler
 }
 
-func NewMetricsHandler(cpuSampler *sensors.CPUUtilSampler, memSampler *sensors.MemorySampler) *MetricsHandler {
-	return &MetricsHandler{cpuSampler, memSampler}
+func NewMetricsHandler(cpuSampler *sensors.CPUUtilSampler, cpuPower *sensors.CPUPowerSampler, memSampler *sensors.MemorySampler) *MetricsHandler {
+	return &MetricsHandler{cpuSampler, cpuPower, memSampler}
 }
 
 func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
@@ -68,6 +70,7 @@ func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
 
 	// fmt.Println("util_pct ->", h.cpuSampler.Utilization())
 	resp.CPU.UtilPct = h.cpuSampler.Utilization()
+	resp.CPU.PowerW = h.cpuPower.PowerW()
 
 	memSnapshot, err := h.memSampler.Snapshot()
 	if err == nil {

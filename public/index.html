@@ -71,7 +71,7 @@
               </svg>
             </div>
 
-            <div class="stat-title text-lg font-semibold">CPU</div>
+            <div id="cpu_power" class="stat-title text-lg font-semibold">CPU (--W)</div>
 
             <div class="stat-value text-4xl leading-none">
               <span id="cpu_temp">--</span>
@@ -84,7 +84,7 @@
 
             <progress
               id="cpu_progress"
-              class="progress progress-primary w-44 h-3"
+              class="progress progress-primary w-48 h-3"
               value="39"
               max="95">
             </progress>
@@ -121,7 +121,7 @@
               </svg>
             </div>
 
-            <div class="stat-title text-lg">GPU</div>
+            <div id="gpu_power" class="stat-title text-lg font-semibold">GPU</div>
 
             <div class="stat-value text-4xl leading-none">
               <span id="gpu_hotspot">--</span>
@@ -134,7 +134,7 @@
 
             <progress
               id="gpu_progress"
-              class="progress progress-primary w-44 h-3"
+              class="progress progress-primary w-48 h-3"
               value="00"
               max="110">
             </progress>
@@ -227,8 +227,10 @@
         // CPU
         const cpuTemp = Math.round(data.cpu.temp_c)
         const cpuUtil = Math.round(data.cpu.util_pct)
+        const cpuPower = Math.round(data.cpu.power_w)
         document.getElementById("cpu_temp").textContent = cpuTemp
         document.getElementById("cpu_progress").value = cpuTemp
+        document.getElementById("cpu_power").textContent = `CPU (${cpuPower}W)`
 
         const cpuRadial = document.getElementById("cpu_util")
         cpuRadial.style.setProperty("--value", cpuUtil)
@@ -244,8 +246,9 @@
         const gpuPower = Math.round(data.gpu.power_w)
 
         document.getElementById("gpu_hotspot").textContent = gpuHotspot
-        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVram}°C · ${gpuPower}W`
+        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVram}°C · `
         document.getElementById("gpu_progress").value = gpuHotspot
+        document.getElementById("gpu_power").textContent = `GPU (${gpuPower}W)`
 
 
         const radial = document.getElementById("gpu_util")
@@ -254,12 +257,12 @@
           `${gpuUtil}%`
 
         // RAM
-        const ramTotal = Math.round(data.ram.total_gb)
-        const ramUsed = Math.round(data.ram.used_gb)
-        const ramAvail = Math.round(data.ram.avail_gb)
-        const ramUsedPct = Math.round(data.ram.used_pct)
+        const ramTotal = Math.round(data.ram.total_gb * 10) / 10;
+        const ramUsed = Math.round(data.ram.used_gb * 10) / 10;
+        const ramAvail = Math.round(data.ram.avail_gb * 10) / 10;
+        const ramUsedPct = Math.round(data.ram.used_pct * 10) / 10;
 
-        document.getElementById("ram_desc").textContent = `RAM ${ramUsed}gb / ${ramTotal}gb (${ramUsedPct}%)`
+        document.getElementById("ram_desc").textContent = `RAM ${ramUsed}/${ramTotal}gb (${ramUsedPct}%)`
       }
 
       async function poll() {

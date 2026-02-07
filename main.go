@@ -14,10 +14,11 @@ func main() {
 	app := fiber.New()
 
 	cpuSampler := sensors.NewCPUUtilSampler(time.Second)
+	cpuPowerSampler := sensors.NewCPUPowerSampler(time.Second)
 	memSampler := sensors.NewMemorySampler()
 
 	// create haldler with cpu sampler dep injected
-	metricsHandler := handlers.NewMetricsHandler(cpuSampler, memSampler)
+	metricsHandler := handlers.NewMetricsHandler(cpuSampler, cpuPowerSampler, memSampler)
 
 	// Serve the sensor panel HTML
 	app.Get("/", func(c *fiber.Ctx) error {
