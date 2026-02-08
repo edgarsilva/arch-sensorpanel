@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html data-theme="winter">
+<html data-theme="lofi">
+  <!-- some good themes for cool winter, corporate, nord, aqua, lofi, business, dark, dim -->
   <head>
     <meta charset="utf-8" />
     <title>Sensor Panel</title>
@@ -71,7 +72,7 @@
           <div class="flex flex-col items-center mr-1">
             <div
               id="cpu_util"
-              class="radial-progress text-primary bg-secondary/20"
+              class="radial-progress text-primary bg-secondary/30"
               style="--value:0; --size:5.2rem; --thickness:10px;"
               role="progressbar">
               <span id="cpu_util_text" class="text-lg font-semibold text-base-content/80">--w</span>
@@ -80,7 +81,7 @@
 
           <!-- CPU STAT -->
           <div class="stat gap-2">
-            <div class="stat-figure text-primary">
+            <div class="stat-figure text-primary p-4">
               <!-- CPU icon -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -129,7 +130,7 @@
           <div class="flex flex-col items-center">
             <div
               id="gpu_util"
-              class="radial-progress text-accent bg-secondary/20"
+              class="radial-progress text-primary bg-secondary/30"
               style="--value:0; --size:5.2rem; --thickness:4px;"
               role="progressbar">
               <span id="gpu_util_text" class="text-lg font-semibold text-base-content/80">--°</span>
@@ -138,7 +139,7 @@
 
           <!-- GPU STAT -->
           <div class="stat">
-            <div class="stat-figure text-accent pl-12">
+            <div class="stat-figure text-primary p-4">
               <!-- GPU icon -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -158,6 +159,7 @@
             <div class="stat-value text-4xl leading-none">
               <span id="gpu_hotspot">--</span>
               <span class="text-lg align-top">°C</span>
+              <span id="vram_temp" class="text-sm font-normal text-base-content/70">°C</span>
             </div>
 
             <div id="" class="stat-desc flex flex-col text-base">
@@ -172,7 +174,7 @@
 
               <progress
                 id="gpu_progress"
-                class="progress progress-accent w-48 h-1"
+                class="progress progress-primary w-48 h-1"
                 value="00"
                 max="110">
               </progress>
@@ -261,11 +263,11 @@
         }
       }
 
-      function tempColorForPct(temp, max = 95) {
-        const clamped = Math.min(Math.max(temp, 30), max)
+      function tempColorForPct(temp, max = 95, min = 35) {
+        const clamped = Math.min(Math.max(temp, min), max)
 
         // Map temp range → hue (blue → red)
-        const hue = 220 - ((clamped - 30) / (max - 30)) * 220
+        const hue = 220 - ((clamped - min) / (max - min)) * 220
 
         return `hsl(${hue}, 85%, 55%)`
       }
@@ -301,14 +303,15 @@
         const gpuPower = Math.round(data.gpu.power_w)
 
         document.getElementById("gpu_hotspot").textContent = gpuHotspot
-        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVramUsed}/${gpuVramTotal}GB (${gpuVramUsedPct}%,${gpuVramTemp}°C)`
+        document.getElementById("vram_temp").textContent = `VRAM ${gpuVramTemp}°C`
+        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVramUsed}/${gpuVramTotal}GB (${gpuVramUsedPct}%`
         document.getElementById("gpu_progress").value = gpuVramUsedPct
         document.getElementById("gpu_power").textContent = `GPU (${gpuPower}W)`
 
         const gpuTempProgress = document.getElementById("gpu_temp_progress")
         if (gpuTempProgress) {
           gpuTempProgress.value = gpuHotspot
-          gpuTempProgress.style.setProperty("--gpu-temp-color", tempColorForPct(gpuHotspot, 110))
+          gpuTempProgress.style.setProperty("--gpu-temp-color", tempColorForPct(gpuHotspot, 110, 45))
         }
 
         const radial = document.getElementById("gpu_util")
