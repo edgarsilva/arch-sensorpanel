@@ -19,11 +19,13 @@ FEATURES
 
 - CPU temperature (AMD Tctl)
 - GPU temperatures (edge, hotspot, VRAM)
+- GPU VRAM usage (used/total)
 - GPU power draw (watts)
 - Normalized JSON API
 - DaisyUI-based HUD overlay
 - Ultrawide / 8.8-inch display friendly
 - Kiosk-safe (no focus stealing, non-interactive)
+- Metrics are sampled on an interval and served from cached snapshots
 
 ---------------------------------------------------------------------
 
@@ -32,18 +34,18 @@ ARCHITECTURE
 lm-sensors + sysfs
         |
         v
-sensor-panel-metrics.sh
+Go samplers
         |
         v
-Go / Fiber API  (/api/sensors)
+Go / Fiber API  (/metrics)
         |
         v
 Browser HUD overlay (DaisyUI)
 
 Design rationale:
 
-- Hardware access stays in Bash for simplicity and flexibility
-- Go server is transport-only
+- Hardware access stays in Go samplers for fewer dependencies
+- Go server returns normalized JSON
 - UI consumes stable, normalized JSON
 - Any layer can be replaced independently
 
@@ -55,8 +57,6 @@ PROJECT LAYOUT
 ├── main.go
 ├── public/
 │   └── index.html
-├── scripts/
-│   └── metrics_collector.sh
 ├── README.md
 └── LICENSE
 
@@ -67,7 +67,6 @@ REQUIREMENTS
 System:
 
 - lm-sensors
-- jq
 - AMD GPU using the amdgpu driver
 - /sys/class/drm available
 
@@ -82,16 +81,8 @@ SETUP
 
 1) Install dependencies
 
-sudo pacman -S lm_sensors jq
+sudo pacman -S lm_sensors
 sudo sensors-detect
-
-1) Make the metrics script executable
-
-chmod +x sensor-panel-metrics.sh
-
-Test it:
-
-./sensor-panel-metrics.sh | jq
 
 1) Run the server
 
@@ -101,25 +92,34 @@ go run .
 
 The API will be available at:
 
-<http://localhost:3000/api/sensors>
+<http://localhost:9070/metrics>
 
 ---------------------------------------------------------------------
 
 API
 
-GET /api/sensors
+GET /metrics
 
 Example response:
 
 {
   "cpu": {
-    "temp_c": 38.6
+    "temp_c": 38.6,
+    "util_pct": 12.4,
+    "power_w": 22.1
+  },
+  "ram": {
+    "total_gb": 31.9,
+    "used_gb": 11.4,
+    "avail_gb": 20.5,
+    "used_pct": 35.7
   },
   "gpu": {
     "edge_c": 48,
     "hotspot_c": 57,
     "vram_c": 74,
-    "power_w": 42
+    "power_w": 42,
+    "util_pct": 18
   }
 }
 
@@ -146,11 +146,9 @@ GPU UTILIZATION (OPTIONAL)
 
 GPU utilization is not provided by lm-sensors.
 
-On AMD systems it can be read from:
+On AMD systems it is read from:
 
 /sys/class/drm/card0/device/gpu_busy_percent
-
-This can be added to the Bash script or read directly in Go.
 
 ---------------------------------------------------------------------
 
@@ -158,7 +156,7 @@ SECURITY NOTES
 
 - Intended for local or localhost use
 - Do not expose publicly without authentication
-- Script execution is time-limited in the Go handler
+- Sensor collection is performed in-process by Go samplers
 
 ---------------------------------------------------------------------
 

@@ -3,7 +3,6 @@
 package sensors
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,17 +54,6 @@ func (s *CPUPowerSampler) run(interval time.Duration) {
 	}
 }
 
-func (s *CPUPowerSampler) PowerW() float64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.powerW
-}
-
-func detectRAPLPackagePath() string {
-	name := "intel-rapl:0"
-	return filepath.Join("/sys/class/powercap", name)
-}
-
 func readEnergy(energyPath string, maxPath string) (uint64, uint64, error) {
 	energyRaw, err := os.ReadFile(energyPath)
 	if err != nil {
@@ -75,9 +63,6 @@ func readEnergy(energyPath string, maxPath string) (uint64, uint64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-
-	fmt.Println("energyRaw ->", string(energyRaw))
-	fmt.Println("maxRaw ->", string(maxRaw))
 
 	energy, err := strconv.ParseUint(strings.TrimSpace(string(energyRaw)), 10, 64)
 	if err != nil {
@@ -89,4 +74,15 @@ func readEnergy(energyPath string, maxPath string) (uint64, uint64, error) {
 	}
 
 	return energy, maxEnergy, nil
+}
+
+func (s *CPUPowerSampler) PowerW() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.powerW
+}
+
+func detectRAPLPackagePath() string {
+	name := "intel-rapl:0"
+	return filepath.Join("/sys/class/powercap", name)
 }

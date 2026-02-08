@@ -8,25 +8,55 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
-type MemorySnapshot struct {
+type SystemRAMSnapshot struct {
 	TotalGB float64
 	UsedGB  float64
 	AvailGB float64
 	UsedPct float64
 }
 
-type MemorySampler struct{}
-
-func NewMemorySampler() *MemorySampler {
-	return &MemorySampler{}
+type SystemRAMSampler struct {
+	mu       sync.RWMutex
+	snapshot SystemRAMSnapshot
 }
 
-func (s *MemorySampler) Snapshot() (MemorySnapshot, error) {
+func NewSystemRAMSampler(interval time.Duration) *SystemRAMSampler {
+	s := &SystemRAMSampler{}
+	go s.run(interval)
+
+	return s
+}
+
+func (s *SystemRAMSampler) run(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		snapshot, err := readMemorySnapshot()
+		if err != nil {
+			continue
+		}
+
+		s.mu.Lock()
+		s.snapshot = snapshot
+		s.mu.Unlock()
+	}
+}
+
+func (s *SystemRAMSampler) Snapshot() (SystemRAMSnapshot, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.snapshot, nil
+}
+
+func readMemorySnapshot() (SystemRAMSnapshot, error) {
 	totalKB, availKB, err := readMemInfo()
 	if err != nil {
-		return MemorySnapshot{}, err
+		return SystemRAMSnapshot{}, err
 	}
 
 	totalGB := float64(totalKB) / (1024.0 * 1024.0)
@@ -38,7 +68,7 @@ func (s *MemorySampler) Snapshot() (MemorySnapshot, error) {
 		usedPct = 100.0 * usedGB / totalGB
 	}
 
-	return MemorySnapshot{
+	return SystemRAMSnapshot{
 		TotalGB: totalGB,
 		UsedGB:  usedGB,
 		AvailGB: availGB,

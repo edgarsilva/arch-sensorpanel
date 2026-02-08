@@ -12,21 +12,21 @@ import (
 	"time"
 )
 
-type CPUUtilSampler struct {
+type CPUBusySampler struct {
 	mu        sync.RWMutex
 	lastIdle  uint64
 	lastTotal uint64
 	utilPct   float64
 }
 
-func NewCPUUtilSampler(interval time.Duration) *CPUUtilSampler {
-	s := &CPUUtilSampler{}
+func NewCPUBusySampler(interval time.Duration) *CPUBusySampler {
+	s := &CPUBusySampler{}
 	go s.run(interval)
 
 	return s
 }
 
-func (s *CPUUtilSampler) run(interval time.Duration) {
+func (s *CPUBusySampler) run(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -50,7 +50,7 @@ func (s *CPUUtilSampler) run(interval time.Duration) {
 	}
 }
 
-func (s *CPUUtilSampler) Utilization() float64 {
+func (s *CPUBusySampler) Utilization() float64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.utilPct

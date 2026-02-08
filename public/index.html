@@ -129,7 +129,7 @@
             </div>
 
             <div id="gpu_desc" class="stat-desc text-base">
-              Edge --°C · VRAM --°C · --W
+              VRAM --GB · --°C
             </div>
 
             <progress
@@ -243,10 +243,14 @@
         const gpuHotspot = Math.round(data.gpu.hotspot_c)
         const gpuUtil = Math.round(data.gpu.util_pct)
         const gpuVram = Math.round(data.gpu.vram_c)
+        const gpuVramTotal = Math.round(data.gpu.vram_total_gb * 10) / 10
+        const gpuVramUsed = Math.round(data.gpu.vram_used_gb * 10) / 10
+        const gpuVramUsedPct = Math.round(data.gpu.vram_used_pct)
         const gpuPower = Math.round(data.gpu.power_w)
 
         document.getElementById("gpu_hotspot").textContent = gpuHotspot
-        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVram}°C · `
+        document.getElementById("gpu_desc").textContent =
+          `VRAM ${gpuVramUsed}/${gpuVramTotal}GB (${gpuVramUsedPct}%) · ${gpuVram}°C · `
         document.getElementById("gpu_progress").value = gpuHotspot
         document.getElementById("gpu_power").textContent = `GPU (${gpuPower}W)`
 

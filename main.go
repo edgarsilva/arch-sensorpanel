@@ -13,12 +13,22 @@ import (
 func main() {
 	app := fiber.New()
 
-	cpuSampler := sensors.NewCPUUtilSampler(time.Second)
+	cpuSampler := sensors.NewCPUBusySampler(time.Second)
 	cpuPowerSampler := sensors.NewCPUPowerSampler(time.Second)
-	memSampler := sensors.NewMemorySampler()
+	ramSampler := sensors.NewSystemRAMSampler(time.Second)
+	sensorsSampler := sensors.NewLmSensorsSampler(time.Second)
+	gpuBusySampler := sensors.NewGPUBusySampler(time.Second)
+	gpuVRAMSampler := sensors.NewGPUVRAMSampler(time.Second)
 
 	// create haldler with cpu sampler dep injected
-	metricsHandler := handlers.NewMetricsHandler(cpuSampler, cpuPowerSampler, memSampler)
+	metricsHandler := handlers.NewMetricsHandler(
+		cpuSampler,
+		cpuPowerSampler,
+		ramSampler,
+		sensorsSampler,
+		gpuBusySampler,
+		gpuVRAMSampler,
+	)
 
 	// Serve the sensor panel HTML
 	app.Get("/", func(c *fiber.Ctx) error {
