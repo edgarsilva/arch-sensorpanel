@@ -28,6 +28,31 @@
         transform: translate(-50%, -50%);
         border: 0;
       }
+
+      /* Firefox */
+      progress#cpu_temp_progress::-moz-progress-bar {
+        background-color: var(--cpu-temp-color);
+        transition: background-color 300ms linear;
+      }
+
+      /* Chromium / WebKit */
+      progress#cpu_temp_progress::-webkit-progress-value {
+        background-color: var(--cpu-temp-color);
+        transition: background-color 300ms linear;
+      }
+
+      /* Firefox */
+      progress#gpu_temp_progress::-moz-progress-bar {
+        background-color: var(--gpu-temp-color);
+        transition: background-color 300ms linear;
+      }
+
+      /* Chromium / WebKit */
+      progress#gpu_temp_progress::-webkit-progress-value {
+        background-color: var(--gpu-temp-color);
+        transition: background-color 300ms linear;
+      }
+
     </style>
 
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
@@ -41,21 +66,20 @@
 
     <div class="fixed inset-0 flex items-center z-50 pointer-events-none">
       <div class="flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150 translate-x-28">
-        <div class="flex items-center gap-8">
+        <div class="flex items-center">
           <!-- CPU Power (RADIAL) -->
-          <div class="flex flex-col items-center">
+          <div class="flex flex-col items-center mr-1">
             <div
               id="cpu_util"
-              class="radial-progress text-primary border bg-accent/30"
+              class="radial-progress text-primary bg-secondary/20"
               style="--value:0; --size:5.2rem; --thickness:10px;"
               role="progressbar">
               <span id="cpu_util_text" class="text-lg font-semibold text-base-content/80">--w</span>
             </div>
-            <span class="text-sm font-semibold text-base-content/70 mt-1">Load</span>
           </div>
 
           <!-- CPU STAT -->
-          <div class="stat">
+          <div class="stat gap-2">
             <div class="stat-figure text-primary">
               <!-- CPU icon -->
               <svg
@@ -78,35 +102,43 @@
               <span class="text-lg align-top">°C</span>
             </div>
 
-            <div id="ram_desc" class="stat-desc text-base font-semibold">
-              RAM --gb/--gb
-            </div>
+            <div id="" class="stat-desc flex flex-col text-base">
+              <progress
+                id="cpu_temp_progress"
+                class="progress w-48 h-1 mb-2"
+                value="0"
+                max="95">
+              </progress>
 
-            <progress
-              id="cpu_progress"
-              class="progress progress-primary w-48 h-3"
-              value="39"
-              max="95">
-            </progress>
+              <div id="ram_desc" class="stat-desc text-base">
+                RAM --gb/--gb
+              </div>
+
+              <progress
+                id="ram_progress"
+                class="progress progress-primary w-48 h-1"
+                value="39"
+                max="95">
+              </progress>
+            </div>
           </div>
         </div>
 
-        <div class="flex items-center gap-10">
+        <div class="flex items-center gap-2">
           <!-- GPU UTIL (RADIAL) -->
           <div class="flex flex-col items-center">
             <div
               id="gpu_util"
-              class="radial-progress text-primary border bg-secondary/30"
-              style="--value:0; --size:5.2rem; --thickness:10px;"
+              class="radial-progress text-accent bg-secondary/20"
+              style="--value:0; --size:5.2rem; --thickness:4px;"
               role="progressbar">
               <span id="gpu_util_text" class="text-lg font-semibold text-base-content/80">--°</span>
             </div>
-            <span class="text-sm font-semibold text-base-content/70 mt-1">Load</span>
           </div>
 
           <!-- GPU STAT -->
           <div class="stat">
-            <div class="stat-figure text-primary">
+            <div class="stat-figure text-accent pl-12">
               <!-- GPU icon -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -128,16 +160,24 @@
               <span class="text-lg align-top">°C</span>
             </div>
 
-            <div id="gpu_desc" class="stat-desc text-base">
-              VRAM --GB · --°C
-            </div>
+            <div id="" class="stat-desc flex flex-col text-base">
+              <progress
+                id="gpu_temp_progress"
+                class="progress progress-error w-48 h-1 mb-2"
+                value="0"
+                max="110">
+              </progress>
 
-            <progress
-              id="gpu_progress"
-              class="progress progress-primary w-48 h-3"
-              value="00"
-              max="110">
-            </progress>
+              <span id="gpu_desc">VRAM --GB · --°C</span>
+
+              <progress
+                id="gpu_progress"
+                class="progress progress-accent w-48 h-1"
+                value="00"
+                max="110">
+              </progress>
+
+            </div>
           </div>
         </div>
       </div>
@@ -221,44 +261,59 @@
         }
       }
 
+      function tempColorForPct(temp, max = 95) {
+        const clamped = Math.min(Math.max(temp, 30), max)
+
+        // Map temp range → hue (blue → red)
+        const hue = 220 - ((clamped - 30) / (max - 30)) * 220
+
+        return `hsl(${hue}, 85%, 55%)`
+      }
+
       function updateUI(data) {
         if (!data) return
-
         // CPU
         const cpuTemp = Math.round(data.cpu.temp_c)
         const cpuUtil = Math.round(data.cpu.util_pct)
         const cpuPower = Math.round(data.cpu.power_w)
         document.getElementById("cpu_temp").textContent = cpuTemp
-        document.getElementById("cpu_progress").value = cpuTemp
         document.getElementById("cpu_power").textContent = `CPU (${cpuPower}W)`
+
+        const cpuTempProgress = document.getElementById("cpu_temp_progress")
+        if (cpuTempProgress) {
+          cpuTempProgress.value = cpuTemp
+          cpuTempProgress.style.setProperty("--cpu-temp-color", tempColorForPct(cpuTemp))
+        }
 
         const cpuRadial = document.getElementById("cpu_util")
         cpuRadial.style.setProperty("--value", cpuUtil)
-        document.getElementById("cpu_util_text").textContent =
-          `${cpuUtil}%`
+        document.getElementById("cpu_util_text").textContent = `${cpuUtil}%`
 
 
         // GPU
         const gpuEdge = Math.round(data.gpu.edge_c)
         const gpuHotspot = Math.round(data.gpu.hotspot_c)
         const gpuUtil = Math.round(data.gpu.util_pct)
-        const gpuVram = Math.round(data.gpu.vram_c)
+        const gpuVramTemp = Math.round(data.gpu.vram_c)
         const gpuVramTotal = Math.round(data.gpu.vram_total_gb * 10) / 10
         const gpuVramUsed = Math.round(data.gpu.vram_used_gb * 10) / 10
         const gpuVramUsedPct = Math.round(data.gpu.vram_used_pct)
         const gpuPower = Math.round(data.gpu.power_w)
 
         document.getElementById("gpu_hotspot").textContent = gpuHotspot
-        document.getElementById("gpu_desc").textContent =
-          `VRAM ${gpuVramUsed}/${gpuVramTotal}GB (${gpuVramUsedPct}%) · ${gpuVram}°C · `
-        document.getElementById("gpu_progress").value = gpuHotspot
+        document.getElementById("gpu_desc").textContent = `VRAM ${gpuVramUsed}/${gpuVramTotal}GB (${gpuVramUsedPct}%,${gpuVramTemp}°C)`
+        document.getElementById("gpu_progress").value = gpuVramUsedPct
         document.getElementById("gpu_power").textContent = `GPU (${gpuPower}W)`
 
+        const gpuTempProgress = document.getElementById("gpu_temp_progress")
+        if (gpuTempProgress) {
+          gpuTempProgress.value = gpuHotspot
+          gpuTempProgress.style.setProperty("--gpu-temp-color", tempColorForPct(gpuHotspot, 110))
+        }
 
         const radial = document.getElementById("gpu_util")
         radial.style.setProperty("--value", gpuUtil)
-        document.getElementById("gpu_util_text").textContent =
-          `${gpuUtil}%`
+        document.getElementById("gpu_util_text").textContent = `${gpuUtil}%`
 
         // RAM
         const ramTotal = Math.round(data.ram.total_gb * 10) / 10;
@@ -266,6 +321,7 @@
         const ramAvail = Math.round(data.ram.avail_gb * 10) / 10;
         const ramUsedPct = Math.round(data.ram.used_pct * 10) / 10;
 
+        document.getElementById("ram_progress").value = ramUsedPct
         document.getElementById("ram_desc").textContent = `RAM ${ramUsed}/${ramTotal}gb (${ramUsedPct}%)`
       }
 
