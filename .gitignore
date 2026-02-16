@@ -21,6 +21,10 @@ go.work.sum
 # Build output
 dist/
 
+# Local binaries
+bin/*
+!bin/.gitkeep
+
 # Env files
 .env
 .env.*
