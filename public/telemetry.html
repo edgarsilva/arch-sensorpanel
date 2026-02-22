@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="business">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sensor Telemetry</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="min-h-screen bg-base-200">
+    <main class="container mx-auto max-w-4xl p-6 md:p-10">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <h1 class="text-2xl font-bold">Sensor Telemetry</h1>
+        <span id="status" class="badge badge-warning">connecting</span>
+      </div>
+
+      <p class="mb-4 text-sm text-base-content/70">
+        Last update: <span id="last-update">--</span>
+      </p>
+
+      <div class="mockup-code text-sm md:text-base">
+        <pre data-prefix="$"><code>ws /metrics/ws</code></pre>
+        <pre><code id="metrics-json">waiting for data...</code></pre>
+      </div>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById("status")
+      const codeEl = document.getElementById("metrics-json")
+      const lastUpdateEl = document.getElementById("last-update")
+      const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
+
+      function setStatus(state) {
+        if (state === "live") {
+          statusEl.className = "badge badge-success"
+          statusEl.textContent = "live"
+          return
+        }
+
+        if (state === "reconnecting") {
+          statusEl.className = "badge badge-warning"
+          statusEl.textContent = "reconnecting"
+          return
+        }
+
+        statusEl.className = "badge badge-warning"
+        statusEl.textContent = "connecting"
+      }
+
+      function connect() {
+        setStatus("connecting")
+        const ws = new WebSocket(WS_URL)
+
+        ws.onopen = () => { setStatus("live") }
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data)
+            codeEl.textContent = JSON.stringify(payload, null, 2)
+            lastUpdateEl.textContent = new Date().toLocaleTimeString()
+          } catch (err) {
+            codeEl.textContent = `invalid payload\n${String(err)}`
+          }
+        }
+
+        ws.onerror = () => {
+          ws.close()
+        }
+
+        ws.onclose = () => {
+          setStatus("reconnecting")
+          setTimeout(connect, 2000)
+        }
+      }
+
+      connect()
+    </script>
+  </body>
+</html>

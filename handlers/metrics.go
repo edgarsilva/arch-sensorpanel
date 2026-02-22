@@ -2,10 +2,20 @@
 package handlers
 
 import (
+	"time"
+
 	"sensorpanel/internal/sensors"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/fasthttp/websocket"
+	"github.com/gofiber/fiber/v3"
+	"github.com/valyala/fasthttp"
 )
+
+var wsUpgrader = websocket.FastHTTPUpgrader{
+	CheckOrigin: func(_ *fasthttp.RequestCtx) bool {
+		return true
+	},
+}
 
 type MetricsResponse struct {
 	CPU struct {
@@ -60,7 +70,35 @@ func NewMetricsHandler(
 	}
 }
 
-func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
+func (h *MetricsHandler) GetMetrics(c fiber.Ctx) error {
+	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	return c.JSON(h.snapshotMetrics())
+}
+
+func (h *MetricsHandler) GetMetricsWS(c fiber.Ctx) error {
+	// Did client asked for websocket upgrade? if not, return 426
+	if !c.IsWebSocket() {
+		return fiber.ErrUpgradeRequired
+	}
+
+	return wsUpgrader.Upgrade(c.RequestCtx(), func(conn *websocket.Conn) {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		defer conn.Close()
+
+		if err := conn.WriteJSON(h.snapshotMetrics()); err != nil {
+			return
+		}
+
+		for range ticker.C {
+			if err := conn.WriteJSON(h.snapshotMetrics()); err != nil {
+				return
+			}
+		}
+	})
+}
+
+func (h *MetricsHandler) snapshotMetrics() MetricsResponse {
 	var resp MetricsResponse
 
 	sensorSnapshot := h.sensorsSampler.Snapshot()
@@ -70,7 +108,6 @@ func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
 	resp.GPU.VramC = sensorSnapshot.GPUVramC
 	resp.GPU.PowerW = sensorSnapshot.GPUPowerW
 
-	// fmt.Println("util_pct ->", h.cpuSampler.Utilization())
 	resp.CPU.UtilPct = h.cpuSampler.Utilization()
 	resp.CPU.PowerW = h.cpuPower.PowerW()
 	resp.GPU.UtilPct = h.gpuBusySampler.Utilization()
@@ -87,6 +124,5 @@ func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
 		resp.RAM.UsedPct = ramSnapshot.UsedPct
 	}
 
-	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	return c.JSON(resp)
+	return resp
 }

@@ -4,14 +4,13 @@ import (
 	"embed"
 	"io/fs"
 	"log"
-	"net/http"
 	"time"
 
 	"sensorpanel/handlers"
 	"sensorpanel/internal/sensors"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/static"
 )
 
 //go:embed public/**
@@ -42,12 +41,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app.Use("/public", filesystem.New(filesystem.Config{
-		Root: http.FS(publicSub),
+	app.Use("/public", static.New("", static.Config{
+		FS: publicSub,
 	}))
 
 	// Serve the sensor panel HTML
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		indexHTML, err := fs.ReadFile(publicSub, "index.html")
 		if err != nil {
 			return fiber.NewError(fiber.StatusInternalServerError, "index.html not found")
@@ -55,7 +54,16 @@ func main() {
 		return c.Type("html").Send(indexHTML)
 	})
 
+	app.Get("/telemetry", func(c fiber.Ctx) error {
+		telemetryHTML, err := fs.ReadFile(publicSub, "telemetry.html")
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "telemetry.html not found")
+		}
+		return c.Type("html").Send(telemetryHTML)
+	})
+
 	app.Get("/metrics", metricsHandler.GetMetrics)
+	app.Get("/metrics/ws", metricsHandler.GetMetricsWS)
 
 	log.Println("Listening on http://localhost:9070")
 	log.Fatal(app.Listen(":9070"))

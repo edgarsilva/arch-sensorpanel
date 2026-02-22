@@ -65,6 +65,16 @@
       <div id="player"></div>
     </div>
 
+    <div class="fixed left-4 bottom-4 z-50 pointer-events-none">
+      <div class="flex items-center gap-2 rounded-full bg-base-200/85 px-3 py-1.5 backdrop-blur-sm">
+        <span class="relative inline-flex size-3">
+          <span id="conn_ping" class="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping"></span>
+          <span id="conn_dot" class="relative inline-flex size-3 rounded-full bg-success"></span>
+        </span>
+        <span id="conn_text" class="text-xs font-medium text-base-content/80">live</span>
+      </div>
+    </div>
+
     <div class="fixed inset-0 flex items-center z-50 pointer-events-none">
       <div class="flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150 translate-x-28">
         <div class="flex items-center">
@@ -249,19 +259,7 @@
         player.playVideo();
       }
 
-      const API_URL = "/metrics"
-      const POLL_INTERVAL_MS = 1000
-
-      async function fetchSensors() {
-        try {
-          const res = await fetch(API_URL, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad response")
-          return await res.json()
-        } catch (err) {
-          console.warn("sensor fetch failed", err)
-          return null
-        }
-      }
+      const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 
       function tempColorForPct(temp, max = 95, min = 35) {
         const clamped = Math.min(Math.max(temp, min), max)
@@ -328,13 +326,60 @@
         document.getElementById("ram_desc").textContent = `RAM ${ramUsed}/${ramTotal}gb (${ramUsedPct}%)`
       }
 
-      async function poll() {
-        const data = await fetchSensors()
-        updateUI(data)
+      function setConnectionState(state) {
+        const dot = document.getElementById("conn_dot")
+        const ping = document.getElementById("conn_ping")
+        const text = document.getElementById("conn_text")
+
+        if (!dot || !ping || !text) return
+
+        if (state === "live") {
+          dot.className = "relative inline-flex size-3 rounded-full bg-success"
+          ping.className = "absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping"
+          text.textContent = "live"
+          return
+        }
+
+        if (state === "reconnecting") {
+          dot.className = "relative inline-flex size-3 rounded-full bg-warning"
+          ping.className = "absolute inline-flex h-full w-full rounded-full bg-warning opacity-50 animate-ping"
+          text.textContent = "reconnecting"
+          return
+        }
+
+        dot.className = "relative inline-flex size-3 rounded-full bg-neutral"
+        ping.className = "absolute inline-flex h-full w-full rounded-full bg-neutral opacity-40"
+        text.textContent = "connecting"
       }
 
-      setInterval(poll, POLL_INTERVAL_MS)
-      poll()
+      function connectMetricsSocket() {
+        setConnectionState("connecting")
+        const ws = new WebSocket(WS_URL)
+
+        ws.onopen = () => {
+          setConnectionState("live")
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            updateUI(JSON.parse(event.data))
+          } catch (err) {
+            console.warn("invalid ws payload", err)
+          }
+        }
+
+        ws.onerror = () => {
+          setConnectionState("reconnecting")
+          ws.close()
+        }
+
+        ws.onclose = () => {
+          setConnectionState("reconnecting")
+          setTimeout(connectMetricsSocket, 2000)
+        }
+      }
+
+      connectMetricsSocket()
     </script>
   </body>
 </html>
