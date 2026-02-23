@@ -19,6 +19,10 @@ type CPUBusySampler struct {
 	utilPct   float64
 }
 
+type CPUBusySnapshot struct {
+	UtilPct float64
+}
+
 func NewCPUBusySampler(interval time.Duration) *CPUBusySampler {
 	s := &CPUBusySampler{}
 	go s.run(interval)
@@ -50,10 +54,11 @@ func (s *CPUBusySampler) run(interval time.Duration) {
 	}
 }
 
-func (s *CPUBusySampler) Utilization() float64 {
+func (s *CPUBusySampler) Snapshot() CPUBusySnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.utilPct
+
+	return CPUBusySnapshot{UtilPct: s.utilPct}
 }
 
 func readProcStat() (idle uint64, total uint64, err error) {

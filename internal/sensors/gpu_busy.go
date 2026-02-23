@@ -17,6 +17,10 @@ type GPUBusySampler struct {
 	path    string
 }
 
+type GPUBusySnapshot struct {
+	UtilPct float64
+}
+
 func NewGPUBusySampler(interval time.Duration) *GPUBusySampler {
 	path := detectGPUBusyPath()
 	s := &GPUBusySampler{path: path}
@@ -43,10 +47,11 @@ func (s *GPUBusySampler) run(interval time.Duration) {
 	}
 }
 
-func (s *GPUBusySampler) Utilization() float64 {
+func (s *GPUBusySampler) Snapshot() GPUBusySnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.utilPct
+
+	return GPUBusySnapshot{UtilPct: s.utilPct}
 }
 
 func detectGPUBusyPath() string {

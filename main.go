@@ -6,10 +6,11 @@ import (
 	"log"
 	"time"
 
-	"sensorpanel/handlers"
 	"sensorpanel/internal/sensors"
+	"sensorpanel/services/metrics"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/static"
 )
 
@@ -18,6 +19,7 @@ var publicFS embed.FS
 
 func main() {
 	app := fiber.New()
+	app.Use(logger.New())
 
 	cpuSampler := sensors.NewCPUBusySampler(time.Second)
 	cpuPowerSampler := sensors.NewCPUPowerSampler(time.Second)
@@ -27,7 +29,7 @@ func main() {
 	gpuVRAMSampler := sensors.NewGPUVRAMSampler(time.Second)
 
 	// create haldler with cpu sampler dep injected
-	metricsHandler := handlers.NewMetricsHandler(
+	metricsHandler := metrics.New(
 		cpuSampler,
 		cpuPowerSampler,
 		ramSampler,
@@ -62,8 +64,14 @@ func main() {
 		return c.Type("html").Send(telemetryHTML)
 	})
 
+	// app.Use("/metrics/ws", func(c fiber.Ctx) error {
+	// 	if websocket.IsWebSocketUpgrade(c) {
+	// 		return c.Next()
+	// 	}
+	// 	return fiber.ErrUpgradeRequired
+	// })
 	app.Get("/metrics", metricsHandler.GetMetrics)
-	app.Get("/metrics/ws", metricsHandler.GetMetricsWS)
+	app.Get("/metrics/ws", metricsHandler.NewMetricsWS())
 
 	log.Println("Listening on http://localhost:9070")
 	log.Fatal(app.Listen(":9070"))

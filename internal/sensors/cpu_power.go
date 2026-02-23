@@ -19,6 +19,10 @@ type CPUPowerSampler struct {
 	maxPath    string
 }
 
+type CPUPowerSnapshot struct {
+	PowerW float64
+}
+
 func NewCPUPowerSampler(interval time.Duration) *CPUPowerSampler {
 	path := detectRAPLPackagePath()
 	s := &CPUPowerSampler{}
@@ -76,10 +80,11 @@ func readEnergy(energyPath string, maxPath string) (uint64, uint64, error) {
 	return energy, maxEnergy, nil
 }
 
-func (s *CPUPowerSampler) PowerW() float64 {
+func (s *CPUPowerSampler) Snapshot() CPUPowerSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.powerW
+
+	return CPUPowerSnapshot{PowerW: s.powerW}
 }
 
 func detectRAPLPackagePath() string {
