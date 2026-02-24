@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"sensorpanel/internal/sensors"
+	"sensorpanel/internal/server"
+	"time"
 )
 
 type cpuBusyReader interface {
@@ -28,7 +30,10 @@ type gpuVRAMReader interface {
 	Snapshot() sensors.GPUVRAMSnapshot
 }
 
-type Metrics struct {
+type Service struct {
+	*server.Server
+	sampleInterval time.Duration
+
 	cpuSampler     cpuBusyReader
 	cpuPower       cpuPowerReader
 	ramSampler     ramReader
@@ -36,6 +41,8 @@ type Metrics struct {
 	gpuBusySampler gpuBusyReader
 	gpuVRAMSampler gpuVRAMReader
 }
+
+type Option func(*Service)
 
 type Snapshot struct {
 	CPU struct {
@@ -63,33 +70,73 @@ type Snapshot struct {
 	} `json:"gpu"`
 }
 
-func New(
-	cpuSampler *sensors.CPUBusySampler,
-	cpuPower *sensors.CPUPowerSampler,
-	ramSampler *sensors.SystemRAMSampler,
-	sensorsSampler *sensors.LmSensorsSampler,
-	gpuBusySampler *sensors.GPUBusySampler,
-	gpuVRAMSampler *sensors.GPUVRAMSampler,
-) *Metrics {
+func New(s *server.Server, opts ...Option) *Service {
+	svc := &Service{
+		Server:         s,
+		sampleInterval: time.Second,
+	}
+
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(svc)
+	}
+
+	if svc.sampleInterval <= 0 {
+		svc.sampleInterval = time.Second
+	}
+
+	if svc.cpuSampler == nil {
+		svc.cpuSampler = sensors.NewCPUBusySampler(svc.sampleInterval)
+	}
+	if svc.cpuPower == nil {
+		svc.cpuPower = sensors.NewCPUPowerSampler(svc.sampleInterval)
+	}
+	if svc.ramSampler == nil {
+		svc.ramSampler = sensors.NewSystemRAMSampler(svc.sampleInterval)
+	}
+	if svc.sensorsSampler == nil {
+		svc.sensorsSampler = sensors.NewLmSensorsSampler(svc.sampleInterval)
+	}
+	if svc.gpuBusySampler == nil {
+		svc.gpuBusySampler = sensors.NewGPUBusySampler(svc.sampleInterval)
+	}
+	if svc.gpuVRAMSampler == nil {
+		svc.gpuVRAMSampler = sensors.NewGPUVRAMSampler(svc.sampleInterval)
+	}
+
 	return newWithDeps(
-		cpuSampler,
-		cpuPower,
-		ramSampler,
-		sensorsSampler,
-		gpuBusySampler,
-		gpuVRAMSampler,
+		s,
+		svc.sampleInterval,
+		svc.cpuSampler,
+		svc.cpuPower,
+		svc.ramSampler,
+		svc.sensorsSampler,
+		svc.gpuBusySampler,
+		svc.gpuVRAMSampler,
 	)
 }
 
+func WithSampleInterval(interval time.Duration) Option {
+	return func(s *Service) {
+		s.sampleInterval = interval
+	}
+}
+
 func newWithDeps(
+	s *server.Server,
+	sampleInterval time.Duration,
 	cpuSampler cpuBusyReader,
 	cpuPower cpuPowerReader,
 	ramSampler ramReader,
 	sensorsSampler lmSensorsReader,
 	gpuBusySampler gpuBusyReader,
 	gpuVRAMSampler gpuVRAMReader,
-) *Metrics {
-	return &Metrics{
+) *Service {
+	return &Service{
+		Server:         s,
+		sampleInterval: sampleInterval,
 		cpuSampler:     cpuSampler,
 		cpuPower:       cpuPower,
 		ramSampler:     ramSampler,
@@ -99,7 +146,7 @@ func newWithDeps(
 	}
 }
 
-func (m *Metrics) buildSnapshot() Snapshot {
+func (m *Service) buildSnapshot() Snapshot {
 	var resp Snapshot
 
 	sensorSnapshot := m.sensorsSampler.Snapshot()

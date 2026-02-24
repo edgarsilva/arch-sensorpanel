@@ -3,7 +3,9 @@ package metrics
 import (
 	"errors"
 	"sensorpanel/internal/sensors"
+	"sensorpanel/internal/server"
 	"testing"
+	"time"
 )
 
 type fakeCPUBusy struct {
@@ -57,6 +59,8 @@ func (f fakeGPUVRAM) Snapshot() sensors.GPUVRAMSnapshot {
 
 func TestBuildSnapshotMapsAllValues(t *testing.T) {
 	m := newWithDeps(
+		&server.Server{},
+		time.Second,
 		fakeCPUBusy{util: 33.3},
 		fakeCPUPower{power: 45.6},
 		fakeRAM{snapshot: sensors.SystemRAMSnapshot{TotalGB: 32, UsedGB: 14, AvailGB: 18, UsedPct: 43.75}},
@@ -94,6 +98,8 @@ func TestBuildSnapshotMapsAllValues(t *testing.T) {
 
 func TestBuildSnapshotKeepsRAMZeroWhenSamplerFails(t *testing.T) {
 	m := newWithDeps(
+		&server.Server{},
+		time.Second,
 		fakeCPUBusy{util: 10},
 		fakeCPUPower{power: 20},
 		fakeRAM{err: errors.New("ram unavailable")},

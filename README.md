@@ -54,7 +54,9 @@ Design rationale:
 PROJECT LAYOUT
 
 .
-├── main.go
+├── cmd/
+│   └── app/
+│       └── main.go
 ├── public/
 │   └── index.html
 ├── README.md
@@ -72,8 +74,13 @@ System:
 
 Go:
 
-- Go 1.21 or newer
-- Fiber v2
+- Go 1.25 or newer
+- Air (for hot reload in development)
+
+Environment:
+
+- `DATABASE_URI` is a SQLite file path (default: `data/sensorpanel.db.sqlite3`)
+- `APP_ENV` controls DB log verbosity (`development` enables verbose SQL logs)
 
 ---------------------------------------------------------------------
 
@@ -84,11 +91,31 @@ SETUP
 sudo pacman -S lm_sensors
 sudo sensors-detect
 
-1) Run the server
+Install Air:
+
+go install github.com/air-verse/air@latest
+
+Copy env file:
+
+cp .env.example .env
+
+2) Run the server with hot reload
 
 From the project root:
 
-go run .
+make dev
+
+or:
+
+air
+
+3) Run once without watch mode
+
+From the project root:
+
+make run
+
+Database migrations are applied automatically at startup.
 
 The API will be available at:
 

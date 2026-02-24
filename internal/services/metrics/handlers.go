@@ -8,14 +8,14 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func (m *Metrics) GetMetrics(c fiber.Ctx) error {
+func (m *Service) GetMetrics(c fiber.Ctx) error {
 	c.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	return c.JSON(m.buildSnapshot())
 }
 
-func (m *Metrics) NewMetricsWS() fiber.Handler {
+func (m *Service) NewMetricsWS() fiber.Handler {
 	return websocket.New(func(conn *websocket.Conn) {
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(m.sampleInterval)
 		defer ticker.Stop()
 		defer conn.Close()
 

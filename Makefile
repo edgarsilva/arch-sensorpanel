@@ -11,7 +11,7 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help build dev
+.PHONY: help build dev run air-check
 
 ##@ Meta
 help: ## Show this help with available tasks
@@ -22,8 +22,19 @@ help: ## Show this help with available tasks
 ##@ Build
 build: ## Build binary into bin/
 	@mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/$(BINARY) .
+	go build -o $(BIN_DIR)/$(BINARY) ./cmd/app
 
 ##@ Dev
-dev: ## Run app with go run
-	go run .
+air-check: ## Verify Air is installed
+	@command -v air >/dev/null 2>&1 || { \
+		echo "Air is not installed. Install it with:"; \
+		echo "  go install github.com/air-verse/air@latest"; \
+		exit 1; \
+	}
+
+dev: ## Run app with Air (hot reload)
+	@$(MAKE) air-check
+	air
+
+run: ## Run app once with go run
+	go run ./cmd/app
