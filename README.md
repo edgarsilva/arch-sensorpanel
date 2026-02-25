@@ -81,6 +81,7 @@ Environment:
 
 - `DATABASE_URI` is a SQLite file path (default: `data/sensorpanel.db.sqlite3`)
 - `APP_ENV` controls DB log verbosity (`development` enables verbose SQL logs)
+- `APP_PORT` is the Fiber listen port (for example `9070`)
 
 ---------------------------------------------------------------------
 

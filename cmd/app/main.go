@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"sensorpanel/internal/appenv"
 	"sensorpanel/internal/db"
 	"sensorpanel/internal/routes"
 	"sensorpanel/internal/server"
@@ -11,9 +12,14 @@ import (
 )
 
 func main() {
+	env, err := appenv.Load()
+	if err != nil {
+		log.Fatalf("failed to load environment: %v", err)
+	}
+
 	database, err := db.New(db.Config{
-		DatabaseURI: os.Getenv("DATABASE_URI"),
-		Environment: os.Getenv("APP_ENV"),
+		DatabaseURI: env.DatabaseURI,
+		Environment: env.AppEnv,
 	})
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
@@ -41,6 +47,6 @@ func main() {
 
 	routes.RegisterServices(srv)
 
-	log.Println("Listening on http://localhost:9070")
-	log.Fatal(srv.Listen(":9070"))
+	log.Printf("Listening on http://localhost%s", env.ListenAddr())
+	log.Fatal(srv.Listen(env.ListenAddr()))
 }
