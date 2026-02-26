@@ -188,6 +188,14 @@ func validateConfig(config models.SettingsConfig) error {
 		return fmt.Errorf("%w: unsupported video_align %q", ErrInvalidConfig, config.Layout.VideoAlign)
 	}
 
+	if config.Layout.VideoOffsetXPct < -100 || config.Layout.VideoOffsetXPct > 100 {
+		return fmt.Errorf("%w: video_offset_x_pct must be between -100 and 100", ErrInvalidConfig)
+	}
+
+	if config.Layout.VideoOffsetYPct < -100 || config.Layout.VideoOffsetYPct > 100 {
+		return fmt.Errorf("%w: video_offset_y_pct must be between -100 and 100", ErrInvalidConfig)
+	}
+
 	if config.Layout.OverlayPaddingTop < 0 || config.Layout.OverlayPaddingTop > 100 {
 		return fmt.Errorf("%w: overlay_padding_top must be between 0 and 100", ErrInvalidConfig)
 	}

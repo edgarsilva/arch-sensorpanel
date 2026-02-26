@@ -66,6 +66,18 @@
                 </label>
               </fieldset>
 
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Video horizontal offset (%)</legend>
+                <input id="video_offset_x_pct" type="range" min="-100" max="100" step="1" class="range" value="0" />
+                <label class="label">Range: -100% to 100%</label>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Video vertical offset (%)</legend>
+                <input id="video_offset_y_pct" type="range" min="-100" max="100" step="1" class="range" value="0" />
+                <label class="label">Range: -100% to 100%</label>
+              </fieldset>
+
               <h3 class="mt-5 mb-1 border-t border-base-300/70 pt-4 text-sm font-semibold uppercase tracking-wide text-base-content/70">Overlay</h3>
 
               <fieldset class="fieldset w-full">
@@ -190,6 +202,8 @@
               theme: document.getElementById("theme").value,
               video_fit: document.getElementById("video_fit").value,
               video_align: document.getElementById("video_align").value,
+              video_offset_x_pct: Number(document.getElementById("video_offset_x_pct").value || 0),
+              video_offset_y_pct: Number(document.getElementById("video_offset_y_pct").value || 0),
               infinite_video_playback: document.getElementById("infinite_video_playback").checked,
               overlay_padding_top: Number(document.getElementById("overlay_padding_top").value || 0),
               overlay_padding_right: Number(document.getElementById("overlay_padding_right").value || 0),
@@ -246,6 +260,8 @@
         document.getElementById("theme").value = item.config?.layout?.theme || "lofi"
         document.getElementById("video_fit").value = item.config?.layout?.video_fit || "cover"
         document.getElementById("video_align").value = item.config?.layout?.video_align || "center"
+        document.getElementById("video_offset_x_pct").value = item.config?.layout?.video_offset_x_pct || 0
+        document.getElementById("video_offset_y_pct").value = item.config?.layout?.video_offset_y_pct || 0
         document.getElementById("infinite_video_playback").checked = !!item.config?.layout?.infinite_video_playback
         document.getElementById("overlay_padding_top").value = item.config?.layout?.overlay_padding_top || 0
         document.getElementById("overlay_padding_right").value = item.config?.layout?.overlay_padding_right || 0
@@ -275,6 +291,8 @@
           ["theme", cfg.layout.theme || "lofi"],
           ["video_fit", cfg.layout.video_fit || "cover"],
           ["video_align", cfg.layout.video_align || "center"],
+          ["video_offset_x_pct", String(cfg.layout.video_offset_x_pct || 0)],
+          ["video_offset_y_pct", String(cfg.layout.video_offset_y_pct || 0)],
           ["infinite_video_playback", cfg.layout.infinite_video_playback ? "true" : "false"],
           ["overlay_padding_top", String(cfg.layout.overlay_padding_top || 0)],
           ["overlay_padding_right", String(cfg.layout.overlay_padding_right || 0)],

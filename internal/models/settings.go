@@ -33,6 +33,8 @@ type SettingsLayout struct {
 	Theme                 string `json:"theme,omitempty"`
 	VideoFit              string `json:"video_fit,omitempty"`
 	VideoAlign            string `json:"video_align,omitempty"`
+	VideoOffsetXPct       int    `json:"video_offset_x_pct,omitempty"`
+	VideoOffsetYPct       int    `json:"video_offset_y_pct,omitempty"`
 	InfiniteVideoPlayback bool   `json:"infinite_video_playback,omitempty"`
 	OverlayPaddingTop     int    `json:"overlay_padding_top,omitempty"`
 	OverlayPaddingRight   int    `json:"overlay_padding_right,omitempty"`

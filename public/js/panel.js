@@ -15,6 +15,8 @@ let bootConfig = {
     theme: "lofi",
     video_fit: "cover",
     video_align: "center",
+    video_offset_x_pct: 0,
+    video_offset_y_pct: 0,
     infinite_video_playback: false,
     overlay_padding_top: 0,
     overlay_padding_right: 0,
@@ -65,6 +67,48 @@ function applyVideoLayout(layoutConfig) {
   wrap.classList.remove("video-fit-cover", "video-fit-contain", "video-align-left", "video-align-center", "video-align-right")
   wrap.classList.add(fit === "contain" ? "video-fit-contain" : "video-fit-cover")
   wrap.classList.add(`video-align-${align}`)
+}
+
+function applyVideoOffset(layoutConfig) {
+  const wrap = document.querySelector(".video-cover")
+  if (!wrap) return
+
+  const fit = normalizeVideoFit(layoutConfig && layoutConfig.video_fit)
+  const offsetXPct = clamp(Number(layoutConfig && layoutConfig.video_offset_x_pct) || 0, -100, 100)
+  const offsetYPct = clamp(Number(layoutConfig && layoutConfig.video_offset_y_pct) || 0, -100, 100)
+
+  const vw = window.innerWidth || 0
+  const vh = window.innerHeight || 0
+  const videoWFromH = vh * (16 / 9)
+  const videoHFromW = vw * (9 / 16)
+
+  if (fit === "cover") {
+    const iframe = wrap.querySelector("iframe")
+    wrap.style.transform = "translate(0px, 0px)"
+    if (!iframe) return
+
+    const displayedW = Math.max(vw, videoWFromH)
+    const displayedH = Math.max(vh, videoHFromW)
+    const availX = Math.max(0, (displayedW - vw) / 2)
+    const availY = Math.max(0, (displayedH - vh) / 2)
+    const shiftX = availX * (offsetXPct / 100)
+    const shiftY = availY * (offsetYPct / 100)
+    iframe.style.transform = `translate(calc(-50% + ${shiftX}px), calc(-50% + ${shiftY}px))`
+    return
+  }
+
+  const displayedW = Math.min(vw, videoWFromH)
+  const displayedH = Math.min(vh, videoHFromW)
+  const availX = Math.max(0, (vw - displayedW) / 2)
+  const availY = Math.max(0, (vh - displayedH) / 2)
+  const shiftX = availX * (offsetXPct / 100)
+  const shiftY = availY * (offsetYPct / 100)
+  wrap.style.transform = `translate(${shiftX}px, ${shiftY}px)`
+
+  const iframe = wrap.querySelector("iframe")
+  if (iframe) {
+    iframe.style.transform = ""
+  }
 }
 
 function tempColorForPct(temp, max = 95, min = 35) {
@@ -314,6 +358,7 @@ function onYouTubeIframeAPIReady() {
 
 function onPlayerReady(e) {
   e.target.playVideo()
+  applyVideoOffset(bootConfig.layout)
   if (isInfiniteVideoPlaybackEnabled()) {
     startLoopGuard()
   }
@@ -465,10 +510,15 @@ function connectMetricsSocket() {
 
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady
 
+window.addEventListener("resize", () => {
+  applyVideoOffset(bootConfig.layout)
+})
+
 bootstrapSettings().finally(() => {
   mediaMode = resolveMediaMode()
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
+  applyVideoOffset(bootConfig.layout)
   applyLayout(bootConfig.layout)
   applyOverlayPadding(bootConfig.layout)
   applyMetricsTuning(bootConfig.layout)

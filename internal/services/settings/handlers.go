@@ -20,6 +20,8 @@ type createSettingsInput struct {
 	Theme                 string                `form:"theme"`
 	VideoFit              string                `form:"video_fit"`
 	VideoAlign            string                `form:"video_align"`
+	VideoOffsetXPct       string                `form:"video_offset_x_pct"`
+	VideoOffsetYPct       string                `form:"video_offset_y_pct"`
 	InfiniteVideoPlayback string                `form:"infinite_video_playback"`
 	OverlayPaddingTop     string                `form:"overlay_padding_top"`
 	OverlayPaddingRight   string                `form:"overlay_padding_right"`
@@ -308,6 +310,8 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 			Theme:                 strings.TrimSpace(in.Theme),
 			VideoFit:              strings.TrimSpace(in.VideoFit),
 			VideoAlign:            strings.TrimSpace(in.VideoAlign),
+			VideoOffsetXPct:       parseIntOrZero(in.VideoOffsetXPct),
+			VideoOffsetYPct:       parseIntOrZero(in.VideoOffsetYPct),
 			InfiniteVideoPlayback: parseBoolForm(in.InfiniteVideoPlayback),
 			OverlayPaddingTop:     parseIntOrZero(in.OverlayPaddingTop),
 			OverlayPaddingRight:   parseIntOrZero(in.OverlayPaddingRight),
