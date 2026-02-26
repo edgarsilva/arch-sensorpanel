@@ -1,5 +1,6 @@
 let player
 let loopTimer
+let mediaMode = { kind: "youtube", videoId: "", playlistId: "" }
 
 const RESTART_THRESHOLD = 0.5
 const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
@@ -141,21 +142,68 @@ function extractVideoIdFromURL(rawURL) {
   return ""
 }
 
-function resolveVideoId() {
+function extractPlaylistIdFromURL(rawURL) {
+  if (!rawURL) return ""
+  try {
+    const url = new URL(rawURL)
+    return url.searchParams.get("list") || ""
+  } catch (_) {
+    return ""
+  }
+}
+
+function resolveMediaMode() {
   const first = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources[0] : null
-  if (!first) return DEFAULT_VIDEO_ID
+  const fallback = { kind: "youtube", videoId: DEFAULT_VIDEO_ID, playlistId: "" }
+  if (!first) return fallback
 
+  const kind = String(first.kind || "youtube").toLowerCase()
   const trimmedURL = String(first.url || "").trim()
-  if (!trimmedURL) return DEFAULT_VIDEO_ID
+  if (!trimmedURL) return fallback
 
-  const parsed = extractVideoIdFromURL(trimmedURL)
-  if (parsed) return parsed
+  const videoId = (() => {
+    const parsed = extractVideoIdFromURL(trimmedURL)
+    if (parsed) return parsed
+    if (/^[A-Za-z0-9_-]{11}$/.test(trimmedURL)) return trimmedURL
+    return DEFAULT_VIDEO_ID
+  })()
 
-  if (/^[A-Za-z0-9_-]{11}$/.test(trimmedURL)) {
-    return trimmedURL
+  if (kind === "playlist") {
+    const playlistId = extractPlaylistIdFromURL(trimmedURL) || trimmedURL
+    if (playlistId) {
+      return { kind: "playlist", videoId, playlistId }
+    }
   }
 
-  return DEFAULT_VIDEO_ID
+  return { kind: "youtube", videoId, playlistId: "" }
+}
+
+function setPlaylistControlsVisible(visible) {
+  const controls = document.getElementById("playlist_controls")
+  if (!controls) return
+  controls.classList.toggle("hidden", !visible)
+}
+
+function bindPlaylistControls() {
+  const prevBtn = document.getElementById("playlist_prev")
+  const nextBtn = document.getElementById("playlist_next")
+  if (!prevBtn || !nextBtn) return
+
+  prevBtn.addEventListener("click", () => {
+    if (player && typeof player.previousVideo === "function") {
+      player.previousVideo()
+    }
+  })
+
+  nextBtn.addEventListener("click", () => {
+    if (player && typeof player.nextVideo === "function") {
+      player.nextVideo()
+    }
+  })
+}
+
+function resolveVideoId() {
+  return mediaMode.videoId || DEFAULT_VIDEO_ID
 }
 
 async function bootstrapSettings() {
@@ -172,16 +220,24 @@ async function bootstrapSettings() {
 }
 
 function onYouTubeIframeAPIReady() {
+  const playerVars = {
+    autoplay: 1,
+    mute: 1,
+    controls: 1,
+    rel: 0,
+    playsinline: 1,
+    origin: window.location.origin,
+  }
+
+  if (mediaMode.kind === "playlist" && mediaMode.playlistId) {
+    playerVars.listType = "playlist"
+    playerVars.list = mediaMode.playlistId
+    playerVars.loop = 1
+  }
+
   player = new YT.Player("player", {
     videoId: resolveVideoId(),
-    playerVars: {
-      autoplay: 1,
-      mute: 1,
-      controls: 1,
-      rel: 0,
-      playsinline: 1,
-      origin: window.location.origin,
-    },
+    playerVars,
     events: {
       onReady: onPlayerReady,
       onStateChange: onPlayerStateChange,
@@ -191,15 +247,20 @@ function onYouTubeIframeAPIReady() {
 
 function onPlayerReady(e) {
   e.target.playVideo()
-  startLoopGuard()
+  if (mediaMode.kind !== "playlist") {
+    startLoopGuard()
+  }
 }
 
 function onPlayerStateChange(e) {
-  if (e.data === YT.PlayerState.PLAYING) {
+  if (e.data === YT.PlayerState.PLAYING && mediaMode.kind !== "playlist") {
     startLoopGuard()
   }
 
   if (e.data === YT.PlayerState.ENDED) {
+    if (mediaMode.kind === "playlist") {
+      return
+    }
     restart()
   }
 }
@@ -335,9 +396,12 @@ function connectMetricsSocket() {
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady
 
 bootstrapSettings().finally(() => {
+  mediaMode = resolveMediaMode()
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
   applyLayout(bootConfig.layout)
   applyMetricsTuning(bootConfig.layout)
+  setPlaylistControlsVisible(mediaMode.kind === "playlist")
+  bindPlaylistControls()
   connectMetricsSocket()
 })
