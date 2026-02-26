@@ -13,8 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"sensorpanel/internal/appenv"
 	"sensorpanel/internal/db"
+	"sensorpanel/internal/lib/appenv"
+	"sensorpanel/internal/lib/wshub"
 	"sensorpanel/internal/routes"
 	"sensorpanel/internal/server"
 )
@@ -56,6 +57,7 @@ func main() {
 		server.WithAppEnv(env),
 		server.WithDatabase(database),
 		server.WithPublicFS(os.DirFS("public")),
+		server.WithWSHub(wshub.New()),
 	)
 	if err != nil {
 		log.Fatalf("failed to initialize server: %v", err)

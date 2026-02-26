@@ -8,6 +8,7 @@ import (
 
 	"sensorpanel/internal/models"
 
+	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 )
 
@@ -142,6 +143,10 @@ func (s *Service) Create(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
+	if s.Server != nil && s.Server.WSHub != nil {
+		s.Server.WSHub.BroadcastSettingsUpdated(created.Version)
+	}
+
 	if !wantsJSON(c) {
 		return c.Redirect().To("/settings/" + strconv.FormatUint(uint64(created.ID), 10) + "/edit")
 	}
@@ -179,6 +184,10 @@ func (s *Service) Patch(c fiber.Ctx) error {
 	cfg, err := s.DecodeConfig(created)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if s.Server != nil && s.Server.WSHub != nil {
+		s.Server.WSHub.BroadcastSettingsUpdated(created.Version)
 	}
 
 	if !wantsJSON(c) {
@@ -227,6 +236,26 @@ func (s *Service) PostWithMethodOverride(c fiber.Ctx) error {
 	}
 
 	return s.Create(c)
+}
+
+func (s *Service) NewSettingsWS() fiber.Handler {
+	return websocket.New(func(conn *websocket.Conn) {
+		if s.Server != nil {
+			_ = s.Server.AddSettingsWSConn(conn)
+		}
+		defer func() {
+			if s.Server != nil {
+				_ = s.Server.DelSettingsWSConn(conn)
+			}
+			_ = conn.Close()
+		}()
+
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	})
 }
 
 func wantsJSON(c fiber.Ctx) bool {

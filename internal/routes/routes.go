@@ -59,6 +59,7 @@ func SettingsRoutes(s *server.Server) {
 	s.Get("/settings", settingsHandler.IndexPage)
 	s.Get("/settings/new", settingsHandler.IndexPage)
 	s.Get("/settings/:id/edit", settingsHandler.IndexPage)
+	s.Get("/settings/ws", settingsHandler.NewSettingsWS())
 	s.Post("/settings", settingsHandler.Create)
 	s.Post("/settings/:id", settingsHandler.PostWithMethodOverride)
 

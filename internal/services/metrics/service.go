@@ -3,7 +3,7 @@ package metrics
 import (
 	"time"
 
-	"sensorpanel/internal/sensors"
+	"sensorpanel/internal/lib/sensors"
 	"sensorpanel/internal/server"
 )
 

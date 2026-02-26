@@ -1,13 +1,17 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"strconv"
 
-	"sensorpanel/internal/appenv"
 	"sensorpanel/internal/db"
+	"sensorpanel/internal/lib/appenv"
+	"sensorpanel/internal/lib/wshub"
 
+	"github.com/gofiber/contrib/v3/websocket"
 	"github.com/gofiber/fiber/v3"
 	fiberLogger "github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
@@ -18,11 +22,14 @@ type Server struct {
 	DB       *db.Database
 	PublicFS fs.FS
 	Env      *appenv.Env
+	WSHub    *wshub.Hub
 	port     int
 	fiberCfg *fiber.Config
 }
 
 type ServerOption func(*Server) error
+
+var ErrWSHubNotConfigured = errors.New("ws hub is not configured")
 
 func New(opts ...ServerOption) (*Server, error) {
 	s := &Server{}
@@ -67,7 +74,35 @@ func (s *Server) Shutdown() error {
 		return nil
 	}
 
+	s.CloseWSHubConnections()
+
 	return s.App.Shutdown()
+}
+
+func (s *Server) AddSettingsWSConn(conn *websocket.Conn) error {
+	if s == nil || s.WSHub == nil {
+		log.Printf("warning: cannot add settings ws conn: %v", ErrWSHubNotConfigured)
+		return ErrWSHubNotConfigured
+	}
+	s.WSHub.AddSettingsWSConn(conn)
+	return nil
+}
+
+func (s *Server) DelSettingsWSConn(conn *websocket.Conn) error {
+	if s == nil || s.WSHub == nil {
+		log.Printf("warning: cannot delete settings ws conn: %v", ErrWSHubNotConfigured)
+		return ErrWSHubNotConfigured
+	}
+	s.WSHub.DelSettingsWSConn(conn)
+	return nil
+}
+
+func (s *Server) CloseWSHubConnections() {
+	if s == nil || s.WSHub == nil {
+		return
+	}
+
+	s.WSHub.Close()
 }
 
 func WithDatabase(database *db.Database) ServerOption {
@@ -119,6 +154,17 @@ func WithPort(port int) ServerOption {
 func WithFiberConfig(cfg fiber.Config) ServerOption {
 	return func(s *Server) error {
 		s.fiberCfg = &cfg
+		return nil
+	}
+}
+
+func WithWSHub(hub *wshub.Hub) ServerOption {
+	return func(s *Server) error {
+		if hub == nil {
+			return fmt.Errorf("ws hub is required")
+		}
+
+		s.WSHub = hub
 		return nil
 	}
 }

@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"errors"
-	"sensorpanel/internal/sensors"
+	"sensorpanel/internal/lib/sensors"
 	"sensorpanel/internal/server"
 	"testing"
 	"time"
