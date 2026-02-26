@@ -20,6 +20,11 @@
         <section class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <form id="settings_form" class="space-y-4" method="post">
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Name</legend>
+                <input id="config_name" class="input input-bordered w-full" placeholder="Main Stream Profile" />
+              </fieldset>
+
               <h3 class="mb-1 text-sm font-semibold uppercase tracking-wide text-base-content/70">Media</h3>
 
               <fieldset class="fieldset w-full">
@@ -37,8 +42,20 @@
               </fieldset>
 
               <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Media label (optional)</legend>
-                <input id="media_label" class="input input-bordered w-full" placeholder="Winter loop" />
+                <legend class="fieldset-legend">Video: Fit</legend>
+                <select id="video_fit" class="select select-bordered w-full">
+                  <option value="cover">cover</option>
+                  <option value="contain">contain</option>
+                </select>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Video: Contain alignment</legend>
+                <select id="video_align" class="select select-bordered w-full">
+                  <option value="left">left</option>
+                  <option value="center">center</option>
+                  <option value="right">right</option>
+                </select>
               </fieldset>
 
               <h3 class="mt-5 mb-1 border-t border-base-300/70 pt-4 text-sm font-semibold uppercase tracking-wide text-base-content/70">Overlay</h3>
@@ -73,23 +90,6 @@
                 <select id="overlay_layout" class="select select-bordered w-full">
                   <option value="column">Column</option>
                   <option value="row">Row</option>
-                </select>
-              </fieldset>
-
-              <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Video fit</legend>
-                <select id="video_fit" class="select select-bordered w-full">
-                  <option value="cover">cover</option>
-                  <option value="contain">contain</option>
-                </select>
-              </fieldset>
-
-              <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Contain align</legend>
-                <select id="video_align" class="select select-bordered w-full">
-                  <option value="left">left</option>
-                  <option value="center">center</option>
-                  <option value="right">right</option>
                 </select>
               </fieldset>
 
@@ -150,6 +150,7 @@
       function toPayload() {
         return {
           config: {
+            name: document.getElementById("config_name").value.trim(),
             layout: {
               name: document.getElementById("layout_name").value,
               overlay_layout: document.getElementById("overlay_layout").value,
@@ -164,7 +165,7 @@
               {
                 kind: document.getElementById("media_kind").value,
                 url: document.getElementById("media_url").value.trim(),
-                label: document.getElementById("media_label").value.trim(),
+                label: "",
               },
             ],
           },
@@ -188,10 +189,10 @@
 
         for (const item of items) {
           const row = document.createElement("li")
-          row.className = "list-row"
-          const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm">current</span>' : '<span class="badge badge-ghost badge-sm">history</span>'
-          const mediaCount = Array.isArray(item.config?.media_sources) ? item.config.media_sources.length : 0
-          row.innerHTML = `<div class="flex flex-col"><div class="font-semibold">v${item.version}</div><div class="text-xs uppercase font-semibold opacity-60">layout ${item.config?.layout?.name || "--"} · media ${mediaCount}</div></div><div class="flex items-center justify-end gap-2">${currentBadge}<a class="btn btn-xs btn-ghost" href="/settings/${item.id}/edit">edit</a></div>`
+          row.className = "list-row flex flex-nowrap items-start gap-3"
+          const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm whitespace-nowrap">current</span>' : '<span class="badge badge-ghost badge-sm whitespace-nowrap">history</span>'
+          const configName = (item.config?.name || "Untitled").trim()
+          row.innerHTML = `<div class="min-w-0 flex-1"><div class="font-semibold leading-snug break-words [overflow-wrap:anywhere]">${configName}</div><div class="text-xs uppercase font-semibold opacity-60">v${item.version}</div></div><div class="shrink-0 flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">${currentBadge}<a class="btn btn-xs btn-ghost whitespace-nowrap" href="/settings/${item.id}/edit">edit</a></div>`
           listEl.appendChild(row)
         }
       }
@@ -201,6 +202,7 @@
         const res = await fetch(`/api/settings/${idFromPath}`)
         if (!res.ok) return
         const item = await res.json()
+        document.getElementById("config_name").value = item.config?.name || ""
         document.getElementById("layout_name").value = item.config?.layout?.name || "left"
         document.getElementById("overlay_layout").value = item.config?.layout?.overlay_layout || "column"
         document.getElementById("theme").value = item.config?.layout?.theme || "lofi"
@@ -213,7 +215,6 @@
         if (firstMedia) {
           document.getElementById("media_kind").value = firstMedia.kind || "youtube"
           document.getElementById("media_url").value = firstMedia.url || ""
-          document.getElementById("media_label").value = firstMedia.label || ""
         }
       }
 
@@ -226,6 +227,7 @@
 
         const hidden = [
           ["layout_name", cfg.layout.name],
+          ["config_name", cfg.name || ""],
           ["overlay_layout", cfg.layout.overlay_layout || "column"],
           ["theme", cfg.layout.theme || "lofi"],
           ["video_fit", cfg.layout.video_fit || "cover"],
@@ -235,7 +237,7 @@
           ["metrics_offset_y", String(cfg.layout.metrics_offset_y || 0)],
           ["media_kind", (cfg.media_sources[0] && cfg.media_sources[0].kind) || ""],
           ["media_url", (cfg.media_sources[0] && cfg.media_sources[0].url) || ""],
-          ["media_label", (cfg.media_sources[0] && cfg.media_sources[0].label) || ""],
+          ["media_label", ""],
         ]
 
         if (idFromPath) {

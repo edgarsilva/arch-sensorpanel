@@ -14,6 +14,7 @@ import (
 
 type createSettingsInput struct {
 	Config         models.SettingsConfig `json:"config"`
+	ConfigName     string                `form:"config_name"`
 	LayoutName     string                `form:"layout_name"`
 	OverlayLayout  string                `form:"overlay_layout"`
 	Theme          string                `form:"theme"`
@@ -295,6 +296,7 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 	}
 
 	in.Config = models.SettingsConfig{
+		Name: strings.TrimSpace(in.ConfigName),
 		Layout: models.SettingsLayout{
 			Name:           strings.TrimSpace(in.LayoutName),
 			OverlayLayout:  strings.TrimSpace(in.OverlayLayout),

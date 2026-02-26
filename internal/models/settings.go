@@ -16,6 +16,7 @@ func (Settings) TableName() string {
 }
 
 type SettingsConfig struct {
+	Name         string                `json:"name,omitempty"`
 	MediaSources []SettingsMediaSource `json:"media_sources"`
 	Layout       SettingsLayout        `json:"layout"`
 }
