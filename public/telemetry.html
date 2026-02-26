@@ -12,17 +12,31 @@
   <body class="min-h-screen bg-base-200">
     <main class="container mx-auto max-w-4xl p-6 md:p-10">
       <div class="mb-4 flex items-center justify-between gap-3">
-        <h1 class="text-2xl font-bold">Sensor Telemetry</h1>
-        <span id="status" class="badge badge-warning">connecting</span>
+        <h1 class="text-2xl font-bold">Telemetry</h1>
       </div>
 
-      <p class="mb-4 text-sm text-base-content/70">
-        Last update: <span id="last-update">--</span>
-      </p>
+      <div class="rounded-box border border-base-300 bg-base-100 p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/70">Sensor WS</h2>
+          <span id="status" class="badge badge-warning">connecting</span>
+        </div>
+        <p class="mb-2 text-sm text-base-content/70">Last update: <span id="last-update">--</span></p>
+        <div class="mockup-code text-sm md:text-base">
+          <pre data-prefix="$"><code>ws /metrics/ws</code></pre>
+          <pre><code id="metrics-json">waiting for data...</code></pre>
+        </div>
+      </div>
 
-      <div class="mockup-code text-sm md:text-base">
-        <pre data-prefix="$"><code>ws /metrics/ws</code></pre>
-        <pre><code id="metrics-json">waiting for data...</code></pre>
+      <div class="mt-6 rounded-box border border-base-300 bg-base-100 p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/70">Settings WS</h2>
+          <span id="settings-status" class="badge badge-warning">connecting</span>
+        </div>
+        <p class="mb-2 text-sm text-base-content/70">Last event: <span id="settings-last-update">--</span></p>
+        <div class="mockup-code text-sm">
+          <pre data-prefix="$"><code>ws /settings/ws</code></pre>
+          <pre><code id="settings-json">waiting for settings updates...</code></pre>
+        </div>
       </div>
     </main>
 
@@ -30,7 +44,11 @@
       const statusEl = document.getElementById("status")
       const codeEl = document.getElementById("metrics-json")
       const lastUpdateEl = document.getElementById("last-update")
+      const settingsStatusEl = document.getElementById("settings-status")
+      const settingsCodeEl = document.getElementById("settings-json")
+      const settingsLastUpdateEl = document.getElementById("settings-last-update")
       const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
+      const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
 
       function setStatus(state) {
         if (state === "live") {
@@ -47,6 +65,23 @@
 
         statusEl.className = "badge badge-warning"
         statusEl.textContent = "connecting"
+      }
+
+      function setSettingsStatus(state) {
+        if (state === "live") {
+          settingsStatusEl.className = "badge badge-success"
+          settingsStatusEl.textContent = "live"
+          return
+        }
+
+        if (state === "reconnecting") {
+          settingsStatusEl.className = "badge badge-warning"
+          settingsStatusEl.textContent = "reconnecting"
+          return
+        }
+
+        settingsStatusEl.className = "badge badge-warning"
+        settingsStatusEl.textContent = "connecting"
       }
 
       function connect() {
@@ -75,7 +110,34 @@
         }
       }
 
+      function connectSettingsWS() {
+        setSettingsStatus("connecting")
+        const ws = new WebSocket(SETTINGS_WS_URL)
+
+        ws.onopen = () => { setSettingsStatus("live") }
+
+        ws.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data)
+            settingsCodeEl.textContent = JSON.stringify(payload, null, 2)
+            settingsLastUpdateEl.textContent = new Date().toLocaleTimeString()
+          } catch (err) {
+            settingsCodeEl.textContent = `invalid payload\n${String(err)}`
+          }
+        }
+
+        ws.onerror = () => {
+          ws.close()
+        }
+
+        ws.onclose = () => {
+          setSettingsStatus("reconnecting")
+          setTimeout(connectSettingsWS, 2000)
+        }
+      }
+
       connect()
+      connectSettingsWS()
     </script>
   </body>
 </html>
