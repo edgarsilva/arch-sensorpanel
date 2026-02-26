@@ -71,7 +71,8 @@ function applyVideoLayout(layoutConfig) {
 
 function applyVideoOffset(layoutConfig) {
   const wrap = document.querySelector(".video-cover")
-  if (!wrap) return
+  const playerEl = document.getElementById("player")
+  if (!wrap || !playerEl) return
 
   const fit = normalizeVideoFit(layoutConfig && layoutConfig.video_fit)
   const offsetXPct = clamp(Number(layoutConfig && layoutConfig.video_offset_x_pct) || 0, -100, 100)
@@ -83,17 +84,14 @@ function applyVideoOffset(layoutConfig) {
   const videoHFromW = vw * (9 / 16)
 
   if (fit === "cover") {
-    const iframe = wrap.querySelector("iframe")
-    wrap.style.transform = "translate(0px, 0px)"
-    if (!iframe) return
-
     const displayedW = Math.max(vw, videoWFromH)
     const displayedH = Math.max(vh, videoHFromW)
     const availX = Math.max(0, (displayedW - vw) / 2)
     const availY = Math.max(0, (displayedH - vh) / 2)
     const shiftX = availX * (offsetXPct / 100)
     const shiftY = availY * (offsetYPct / 100)
-    iframe.style.transform = `translate(calc(-50% + ${shiftX}px), calc(-50% + ${shiftY}px))`
+    playerEl.style.setProperty("--video-offset-x", `${shiftX}px`)
+    playerEl.style.setProperty("--video-offset-y", `${shiftY}px`)
     return
   }
 
@@ -103,12 +101,8 @@ function applyVideoOffset(layoutConfig) {
   const availY = Math.max(0, (vh - displayedH) / 2)
   const shiftX = availX * (offsetXPct / 100)
   const shiftY = availY * (offsetYPct / 100)
-  wrap.style.transform = `translate(${shiftX}px, ${shiftY}px)`
-
-  const iframe = wrap.querySelector("iframe")
-  if (iframe) {
-    iframe.style.transform = ""
-  }
+  playerEl.style.setProperty("--video-offset-x", `${shiftX}px`)
+  playerEl.style.setProperty("--video-offset-y", `${shiftY}px`)
 }
 
 function tempColorForPct(temp, max = 95, min = 35) {

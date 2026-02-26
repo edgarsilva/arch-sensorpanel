@@ -33,7 +33,7 @@
       }
 
       /* 16:9 cover math */
-      .video-cover.video-fit-cover iframe {
+      .video-cover.video-fit-cover #player {
         position: absolute;
         top: 50%;
         left: 50%;
@@ -45,16 +45,21 @@
         min-width: 100vw;
         min-height: 56.25vw; /* 9 / 16 * 100 */
 
-        transform: translate(-50%, -50%);
-        border: 0;
+        transform: translate(calc(-50% + var(--video-offset-x, 0px)), calc(-50% + var(--video-offset-y, 0px)));
       }
 
-      .video-cover.video-fit-contain iframe {
+      .video-cover.video-fit-contain #player {
         position: relative;
         width: 100vw;
         height: 56.25vw;
         max-height: 100vh;
         max-width: 177.78vh;
+        transform: translate(var(--video-offset-x, 0px), var(--video-offset-y, 0px));
+      }
+
+      .video-cover #player iframe {
+        width: 100%;
+        height: 100%;
         border: 0;
       }
 
