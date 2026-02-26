@@ -30,7 +30,7 @@ func New(s *server.Server) *Service {
 }
 
 func (s *Service) List(ctx context.Context) ([]models.Settings, error) {
-	rows, err := gorm.G[models.Settings](s.DB.WithContext(ctx)).Order("version DESC").Find(ctx)
+	rows, err := gorm.G[models.Settings](s.DB.WithContext(ctx)).Order("version DESC").Limit(15).Find(ctx)
 	if err != nil {
 		return nil, db.WrapWithOp("list settings", err)
 	}

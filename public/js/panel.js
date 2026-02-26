@@ -105,6 +105,16 @@ function applyVideoOffset(layoutConfig) {
   playerEl.style.setProperty("--video-offset-y", `${shiftY}px`)
 }
 
+function resizeYouTubePlayer() {
+  const playerEl = document.getElementById("player")
+  if (!player || !playerEl || typeof player.setSize !== "function") return
+
+  const rect = playerEl.getBoundingClientRect()
+  const width = Math.max(1, Math.round(rect.width))
+  const height = Math.max(1, Math.round(rect.height))
+  player.setSize(width, height)
+}
+
 function tempColorForPct(temp, max = 95, min = 35) {
   const clamped = Math.min(Math.max(temp, min), max)
   const hue = 220 - ((clamped - min) / (max - min)) * 220
@@ -351,6 +361,7 @@ function onYouTubeIframeAPIReady() {
 }
 
 function onPlayerReady(e) {
+  resizeYouTubePlayer()
   e.target.playVideo()
   applyVideoOffset(bootConfig.layout)
   if (isInfiniteVideoPlaybackEnabled()) {
@@ -505,6 +516,7 @@ function connectMetricsSocket() {
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady
 
 window.addEventListener("resize", () => {
+  resizeYouTubePlayer()
   applyVideoOffset(bootConfig.layout)
 })
 

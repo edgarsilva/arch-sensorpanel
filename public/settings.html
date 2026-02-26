@@ -69,14 +69,18 @@
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Video horizontal offset (%)</legend>
                 <input id="video_offset_x_pct" type="range" min="-100" max="100" step="1" class="range" value="0" />
-                <label class="label">Range: -100% to 100%</label>
+                <label class="label">Range: -100% to 100% <span id="video_offset_x_pct_value" class="badge badge-ghost badge-sm">0%</span></label>
               </fieldset>
 
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Video vertical offset (%)</legend>
                 <input id="video_offset_y_pct" type="range" min="-100" max="100" step="1" class="range" value="0" />
-                <label class="label">Range: -100% to 100%</label>
+                <label class="label">Range: -100% to 100% <span id="video_offset_y_pct_value" class="badge badge-ghost badge-sm">0%</span></label>
               </fieldset>
+
+              <div class="flex justify-end">
+                <button id="reset_video_offset_btn" type="button" class="btn btn-xs btn-ghost">Reset video offsets</button>
+              </div>
 
               <h3 class="mt-5 mb-1 border-t border-base-300/70 pt-4 text-sm font-semibold uppercase tracking-wide text-base-content/70">Overlay</h3>
 
@@ -119,22 +123,30 @@
                   <fieldset class="fieldset w-full">
                     <legend class="fieldset-legend">Padding top</legend>
                     <input id="overlay_padding_top" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                    <label class="label"><span id="overlay_padding_top_value" class="badge badge-ghost badge-sm">0px</span></label>
                   </fieldset>
 
                   <fieldset class="fieldset w-full">
                     <legend class="fieldset-legend">Padding right</legend>
                     <input id="overlay_padding_right" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                    <label class="label"><span id="overlay_padding_right_value" class="badge badge-ghost badge-sm">0px</span></label>
                   </fieldset>
 
                   <fieldset class="fieldset w-full">
                     <legend class="fieldset-legend">Padding bottom</legend>
                     <input id="overlay_padding_bottom" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                    <label class="label"><span id="overlay_padding_bottom_value" class="badge badge-ghost badge-sm">0px</span></label>
                   </fieldset>
 
                   <fieldset class="fieldset w-full">
                     <legend class="fieldset-legend">Padding left</legend>
                     <input id="overlay_padding_left" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                    <label class="label"><span id="overlay_padding_left_value" class="badge badge-ghost badge-sm">0px</span></label>
                   </fieldset>
+
+                  <div class="flex justify-end pt-1">
+                    <button id="reset_overlay_padding_btn" type="button" class="btn btn-xs btn-ghost">Reset overlay padding</button>
+                  </div>
                 </div>
               </details>
 
@@ -180,6 +192,36 @@
       const listEl = document.getElementById("settings_list")
       const form = document.getElementById("settings_form")
       const statusEl = document.getElementById("form_status")
+      const resetVideoOffsetBtn = document.getElementById("reset_video_offset_btn")
+      const resetOverlayPaddingBtn = document.getElementById("reset_overlay_padding_btn")
+
+      const sliderValueBindings = [
+        ["video_offset_x_pct", "video_offset_x_pct_value", "%"],
+        ["video_offset_y_pct", "video_offset_y_pct_value", "%"],
+        ["overlay_padding_top", "overlay_padding_top_value", "px"],
+        ["overlay_padding_right", "overlay_padding_right_value", "px"],
+        ["overlay_padding_bottom", "overlay_padding_bottom_value", "px"],
+        ["overlay_padding_left", "overlay_padding_left_value", "px"],
+      ]
+
+      function updateSliderValue(inputId, valueId, suffix) {
+        const input = document.getElementById(inputId)
+        const valueEl = document.getElementById(valueId)
+        if (!input || !valueEl) return
+        valueEl.textContent = `${input.value}${suffix}`
+      }
+
+      function syncTuningValueLabels() {
+        for (const [inputId, valueId, suffix] of sliderValueBindings) {
+          updateSliderValue(inputId, valueId, suffix)
+        }
+      }
+
+      for (const [inputId, valueId, suffix] of sliderValueBindings) {
+        const input = document.getElementById(inputId)
+        if (!input) continue
+        input.addEventListener("input", () => updateSliderValue(inputId, valueId, suffix))
+      }
 
       const idFromPath = (() => {
         const match = window.location.pathname.match(/^\/settings\/(\d+)\/edit$/)
@@ -227,7 +269,7 @@
       async function loadList() {
         const res = await fetch("/api/settings")
         const data = await res.json()
-        const items = Array.isArray(data.items) ? data.items : []
+        const items = (Array.isArray(data.items) ? data.items : []).slice(0, 15)
 
         listEl.innerHTML = '<li class="p-4 pb-2 text-xs opacity-60 tracking-wide">Settings versions</li>'
 
@@ -270,12 +312,27 @@
         document.getElementById("metrics_scale_pct").value = item.config?.layout?.metrics_scale_pct || 100
         document.getElementById("metrics_offset_x").value = item.config?.layout?.metrics_offset_x || 0
         document.getElementById("metrics_offset_y").value = item.config?.layout?.metrics_offset_y || 0
+        syncTuningValueLabels()
         const firstMedia = Array.isArray(item.config?.media_sources) ? item.config.media_sources[0] : null
         if (firstMedia) {
           document.getElementById("media_kind").value = firstMedia.kind || "youtube"
           document.getElementById("media_url").value = firstMedia.url || ""
         }
       }
+
+      resetVideoOffsetBtn.addEventListener("click", () => {
+        document.getElementById("video_offset_x_pct").value = 0
+        document.getElementById("video_offset_y_pct").value = 0
+        syncTuningValueLabels()
+      })
+
+      resetOverlayPaddingBtn.addEventListener("click", () => {
+        document.getElementById("overlay_padding_top").value = 0
+        document.getElementById("overlay_padding_right").value = 0
+        document.getElementById("overlay_padding_bottom").value = 0
+        document.getElementById("overlay_padding_left").value = 0
+        syncTuningValueLabels()
+      })
 
       form.addEventListener("submit", (e) => {
         e.preventDefault()
@@ -327,6 +384,8 @@
       Promise.all([loadList(), loadEdit()]).catch(() => {
         statusEl.textContent = "failed to load settings"
       })
+
+      syncTuningValueLabels()
     </script>
   </body>
 </html>
