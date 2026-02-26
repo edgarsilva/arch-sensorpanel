@@ -106,7 +106,7 @@
       }
 
       async function loadList() {
-        const res = await fetch("/settings?format=json")
+        const res = await fetch("/api/settings")
         const data = await res.json()
         const items = Array.isArray(data.items) ? data.items : []
 
@@ -132,7 +132,7 @@
 
       async function loadEdit() {
         if (!idFromPath) return
-        const res = await fetch(`/settings/${idFromPath}?format=json`)
+        const res = await fetch(`/api/settings/${idFromPath}`)
         if (!res.ok) return
         const item = await res.json()
         document.getElementById("layout_name").value = item.config?.layout?.name || "left"

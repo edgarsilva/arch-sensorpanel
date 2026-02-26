@@ -224,6 +224,10 @@ func (s *Service) PostWithMethodOverride(c fiber.Ctx) error {
 }
 
 func wantsJSON(c fiber.Ctx) bool {
+	if strings.HasPrefix(strings.ToLower(c.Path()), "/api/") {
+		return true
+	}
+
 	if strings.EqualFold(c.Query("format"), "json") {
 		return true
 	}
