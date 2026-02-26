@@ -9,11 +9,17 @@ import (
 )
 
 func Migrate(database *Database) error {
-	if database == nil || database.SQLDB() == nil {
+	if database == nil {
 		return fmt.Errorf("database is not initialized")
 	}
 
-	sqlDB := database.SQLDB()
+	sqlDB, err := database.SQLDB()
+	if err != nil {
+		return fmt.Errorf("resolve sql db handle: %w", err)
+	}
+	if sqlDB == nil {
+		return fmt.Errorf("database is not initialized")
+	}
 
 	goose.SetBaseFS(migrations.FS)
 	if err := goose.SetDialect("sqlite3"); err != nil {

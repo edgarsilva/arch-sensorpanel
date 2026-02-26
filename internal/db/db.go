@@ -34,8 +34,7 @@ type Config struct {
 }
 
 type Database struct {
-	Gorm  *gorm.DB
-	sqlDB *sql.DB
+	*gorm.DB
 }
 
 func New(cfg Config) (*Database, error) {
@@ -63,19 +62,33 @@ func New(cfg Config) (*Database, error) {
 	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 
-	return &Database{Gorm: db, sqlDB: sqlDB}, nil
+	return &Database{DB: db}, nil
 }
 
-func (d *Database) SQLDB() *sql.DB {
-	return d.sqlDB
+func (d *Database) SQLDB() (*sql.DB, error) {
+	if d == nil || d.DB == nil {
+		return nil, nil
+	}
+
+	sqlDB, err := d.DB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get sql db handle: %w", err)
+	}
+
+	return sqlDB, nil
 }
 
 func (d *Database) Close() error {
-	if d == nil || d.sqlDB == nil {
+	sqlDB, err := d.SQLDB()
+	if err != nil {
+		return err
+	}
+
+	if sqlDB == nil {
 		return nil
 	}
 
-	return d.sqlDB.Close()
+	return sqlDB.Close()
 }
 
 func normalizeSQLitePath(databaseURI string) (string, error) {

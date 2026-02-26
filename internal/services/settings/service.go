@@ -29,7 +29,7 @@ func New(s *server.Server) *Service {
 }
 
 func (s *Service) List(ctx context.Context) ([]models.Settings, error) {
-	rows, err := gorm.G[models.Settings](s.DB.Gorm).Order("version DESC").Find(ctx)
+	rows, err := gorm.G[models.Settings](s.DB.WithContext(ctx)).Order("version DESC").Find(ctx)
 	if err != nil {
 		return nil, db.WrapWithOp("list settings", err)
 	}
@@ -38,7 +38,7 @@ func (s *Service) List(ctx context.Context) ([]models.Settings, error) {
 }
 
 func (s *Service) GetByID(ctx context.Context, id uint) (*models.Settings, error) {
-	row, err := gorm.G[models.Settings](s.DB.Gorm).Where("id = ?", id).First(ctx)
+	row, err := gorm.G[models.Settings](s.DB.WithContext(ctx)).Where("id = ?", id).First(ctx)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSettingsNotFound
@@ -50,7 +50,7 @@ func (s *Service) GetByID(ctx context.Context, id uint) (*models.Settings, error
 }
 
 func (s *Service) GetCurrentRow(ctx context.Context) (*models.Settings, error) {
-	row, err := gorm.G[models.Settings](s.DB.Gorm).Where("is_current = ?", true).First(ctx)
+	row, err := gorm.G[models.Settings](s.DB.WithContext(ctx)).Where("is_current = ?", true).First(ctx)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrSettingsNotFound
@@ -97,7 +97,7 @@ func (s *Service) createVersion(ctx context.Context, config models.SettingsConfi
 	}
 
 	var created models.Settings
-	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var maxVersion int64
 		if err := tx.Model(&models.Settings{}).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion).Error; err != nil {
 			return db.WrapWithOp("select max settings version", err)
