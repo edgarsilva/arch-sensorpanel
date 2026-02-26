@@ -18,6 +18,7 @@ let bootConfig = {
     video_offset_x_pct: 0,
     video_offset_y_pct: 0,
     infinite_video_playback: false,
+    overlay_disable_backdrop: false,
     overlay_padding_top: 0,
     overlay_padding_right: 0,
     overlay_padding_bottom: 0,
@@ -37,7 +38,44 @@ function clamp(value, min, max) {
 
 function normalizeTheme(theme) {
   const value = String(theme || "lofi").toLowerCase()
-  const supported = new Set(["cool", "winter", "corporate", "nord", "aqua", "lofi", "business", "dark", "dim"])
+  const supported = new Set([
+    "cool",
+    "light",
+    "dark",
+    "cupcake",
+    "bumblebee",
+    "emerald",
+    "corporate",
+    "synthwave",
+    "retro",
+    "cyberpunk",
+    "valentine",
+    "halloween",
+    "garden",
+    "forest",
+    "aqua",
+    "lofi",
+    "pastel",
+    "fantasy",
+    "wireframe",
+    "black",
+    "luxury",
+    "dracula",
+    "cmyk",
+    "autumn",
+    "business",
+    "acid",
+    "lemonade",
+    "night",
+    "coffee",
+    "winter",
+    "dim",
+    "nord",
+    "sunset",
+    "caramellatte",
+    "abyss",
+    "silk",
+  ])
   return supported.has(value) ? value : "lofi"
 }
 
@@ -144,17 +182,18 @@ function applyLayout(layoutConfig) {
 
   const layout = normalizeOverlayPosition(layoutConfig && layoutConfig.name)
   const overlayLayout = normalizeOverlayLayout(layoutConfig && layoutConfig.overlay_layout)
+  const hasBackdrop = !(layoutConfig && layoutConfig.overlay_disable_backdrop)
   panel.className = "fixed inset-0 flex items-center z-50 pointer-events-none"
 
   if (overlayLayout === "row") {
-    slot.className = "flex flex-row items-center justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2"
+    slot.className = `flex flex-row items-center justify-center gap-6 h-full rounded-2xl px-8 py-2 ${hasBackdrop ? "bg-white/35" : "bg-transparent"}`
   } else {
-    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2"
+    slot.className = `flex flex-col items-start justify-center gap-6 h-full rounded-2xl px-8 py-2 ${hasBackdrop ? "bg-white/35" : "bg-transparent"}`
   }
 
   if (layout === "cover") {
     panel.classList.add("justify-center")
-    slot.className = `flex ${overlayLayout === "row" ? "flex-row items-center" : "flex-col items-start"} justify-center gap-6 h-full w-full bg-white/25 px-10 py-6`
+    slot.className = `flex ${overlayLayout === "row" ? "flex-row items-center" : "flex-col items-start"} justify-center gap-6 h-full w-full px-10 py-6 ${hasBackdrop ? "bg-white/25" : "bg-transparent"}`
     return
   }
 
@@ -188,10 +227,10 @@ function applyOverlayPadding(layoutConfig) {
   if (!slot) return
 
   const layout = normalizeOverlayPosition(layoutConfig && layoutConfig.name)
-  const extraTop = clamp(Number(layoutConfig && layoutConfig.overlay_padding_top) || 0, 0, 100)
-  const extraRight = clamp(Number(layoutConfig && layoutConfig.overlay_padding_right) || 0, 0, 100)
-  const extraBottom = clamp(Number(layoutConfig && layoutConfig.overlay_padding_bottom) || 0, 0, 100)
-  const extraLeft = clamp(Number(layoutConfig && layoutConfig.overlay_padding_left) || 0, 0, 100)
+  const extraTop = clamp(Number(layoutConfig && layoutConfig.overlay_padding_top) || 0, 0, 500)
+  const extraRight = clamp(Number(layoutConfig && layoutConfig.overlay_padding_right) || 0, 0, 500)
+  const extraBottom = clamp(Number(layoutConfig && layoutConfig.overlay_padding_bottom) || 0, 0, 500)
+  const extraLeft = clamp(Number(layoutConfig && layoutConfig.overlay_padding_left) || 0, 0, 500)
 
   const base = layout === "cover"
     ? { top: 24, right: 40, bottom: 24, left: 40 }

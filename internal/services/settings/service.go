@@ -167,14 +167,41 @@ func validateConfig(config models.SettingsConfig) error {
 	theme := strings.ToLower(strings.TrimSpace(config.Layout.Theme))
 	if theme != "" &&
 		theme != "cool" &&
+		theme != "light" &&
+		theme != "cupcake" &&
+		theme != "bumblebee" &&
+		theme != "emerald" &&
+		theme != "synthwave" &&
+		theme != "retro" &&
+		theme != "cyberpunk" &&
+		theme != "valentine" &&
+		theme != "halloween" &&
+		theme != "garden" &&
+		theme != "forest" &&
 		theme != "winter" &&
 		theme != "corporate" &&
 		theme != "nord" &&
 		theme != "aqua" &&
 		theme != "lofi" &&
+		theme != "pastel" &&
+		theme != "fantasy" &&
+		theme != "wireframe" &&
+		theme != "black" &&
+		theme != "luxury" &&
+		theme != "dracula" &&
+		theme != "cmyk" &&
+		theme != "autumn" &&
 		theme != "business" &&
+		theme != "acid" &&
+		theme != "lemonade" &&
+		theme != "night" &&
+		theme != "coffee" &&
 		theme != "dark" &&
-		theme != "dim" {
+		theme != "dim" &&
+		theme != "sunset" &&
+		theme != "caramellatte" &&
+		theme != "abyss" &&
+		theme != "silk" {
 		return fmt.Errorf("%w: unsupported theme %q", ErrInvalidConfig, config.Layout.Theme)
 	}
 
@@ -196,20 +223,20 @@ func validateConfig(config models.SettingsConfig) error {
 		return fmt.Errorf("%w: video_offset_y_pct must be between -100 and 100", ErrInvalidConfig)
 	}
 
-	if config.Layout.OverlayPaddingTop < 0 || config.Layout.OverlayPaddingTop > 100 {
-		return fmt.Errorf("%w: overlay_padding_top must be between 0 and 100", ErrInvalidConfig)
+	if config.Layout.OverlayPaddingTop < 0 || config.Layout.OverlayPaddingTop > 500 {
+		return fmt.Errorf("%w: overlay_padding_top must be between 0 and 500", ErrInvalidConfig)
 	}
 
-	if config.Layout.OverlayPaddingRight < 0 || config.Layout.OverlayPaddingRight > 100 {
-		return fmt.Errorf("%w: overlay_padding_right must be between 0 and 100", ErrInvalidConfig)
+	if config.Layout.OverlayPaddingRight < 0 || config.Layout.OverlayPaddingRight > 500 {
+		return fmt.Errorf("%w: overlay_padding_right must be between 0 and 500", ErrInvalidConfig)
 	}
 
-	if config.Layout.OverlayPaddingBottom < 0 || config.Layout.OverlayPaddingBottom > 100 {
-		return fmt.Errorf("%w: overlay_padding_bottom must be between 0 and 100", ErrInvalidConfig)
+	if config.Layout.OverlayPaddingBottom < 0 || config.Layout.OverlayPaddingBottom > 500 {
+		return fmt.Errorf("%w: overlay_padding_bottom must be between 0 and 500", ErrInvalidConfig)
 	}
 
-	if config.Layout.OverlayPaddingLeft < 0 || config.Layout.OverlayPaddingLeft > 100 {
-		return fmt.Errorf("%w: overlay_padding_left must be between 0 and 100", ErrInvalidConfig)
+	if config.Layout.OverlayPaddingLeft < 0 || config.Layout.OverlayPaddingLeft > 500 {
+		return fmt.Errorf("%w: overlay_padding_left must be between 0 and 500", ErrInvalidConfig)
 	}
 
 	if config.Layout.MetricsScale != 0 && (config.Layout.MetricsScale < 50 || config.Layout.MetricsScale > 200) {
