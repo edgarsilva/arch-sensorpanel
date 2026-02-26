@@ -18,6 +18,7 @@ import (
 var (
 	ErrSettingsNotFound = errors.New("settings not found")
 	ErrInvalidConfig    = errors.New("invalid settings config")
+	ErrDeleteCurrent    = errors.New("cannot delete current settings")
 )
 
 type Service struct {
@@ -71,6 +72,27 @@ func (s *Service) CreateVersionFromID(ctx context.Context, id uint, config model
 	}
 
 	return s.createVersion(ctx, config)
+}
+
+func (s *Service) DeleteByID(ctx context.Context, id uint) error {
+	row, err := s.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if row.IsCurrent {
+		return ErrDeleteCurrent
+	}
+
+	result := s.DB.WithContext(ctx).Delete(&models.Settings{}, id)
+	if result.Error != nil {
+		return db.WrapWithOp("delete settings", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrSettingsNotFound
+	}
+
+	return nil
 }
 
 func (s *Service) DecodeConfig(row *models.Settings) (models.SettingsConfig, error) {

@@ -83,7 +83,7 @@ function resolveVideoId() {
 
 async function bootstrapSettings() {
   try {
-    const res = await fetch("/api/settings/current", {
+    const res = await fetch("/settings/current", {
       headers: { Accept: "application/json" },
     })
     if (!res.ok) return

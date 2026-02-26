@@ -52,15 +52,16 @@ func SettingsRoutes(s *server.Server) {
 
 	settingsHandler := settings.New(s)
 
-	s.Get("/settings", settingsHandler.IndexPage)
+	s.Get("/settings", settingsHandler.Index)
+	s.Get("/settings/current", settingsHandler.GetCurrent)
 	s.Get("/settings/new", settingsHandler.IndexPage)
+	s.Get("/settings/:id", settingsHandler.Get)
 	s.Get("/settings/:id/edit", settingsHandler.IndexPage)
-
-	s.Get("/api/settings", settingsHandler.Index)
-	s.Get("/api/settings/current", settingsHandler.GetCurrent)
-	s.Get("/api/settings/:id", settingsHandler.Get)
-	s.Post("/api/settings", settingsHandler.Create)
-	s.Patch("/api/settings/:id", settingsHandler.Patch)
+	s.Post("/settings", settingsHandler.Create)
+	s.Post("/settings/:id", settingsHandler.PostWithMethodOverride)
+	s.Put("/settings/:id", settingsHandler.Put)
+	s.Patch("/settings/:id", settingsHandler.Patch)
+	s.Delete("/settings/:id", settingsHandler.Delete)
 }
 
 func MetricsRoutes(s *server.Server) {

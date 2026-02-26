@@ -4,14 +4,20 @@ import (
 	"errors"
 	"io/fs"
 	"strconv"
+	"strings"
 
 	"sensorpanel/internal/models"
 
 	"github.com/gofiber/fiber/v3"
 )
 
-type writeSettingsRequest struct {
-	Config models.SettingsConfig `json:"config"`
+type createSettingsInput struct {
+	Config     models.SettingsConfig `json:"config"`
+	LayoutName string                `form:"layout_name"`
+	LayoutPath string                `form:"layout_path"`
+	MediaKind  string                `form:"media_kind"`
+	MediaURL   string                `form:"media_url"`
+	MediaLabel string                `form:"media_label"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -24,6 +30,10 @@ func (s *Service) IndexPage(c fiber.Ctx) error {
 }
 
 func (s *Service) Index(c fiber.Ctx) error {
+	if !wantsJSON(c) {
+		return s.IndexPage(c)
+	}
+
 	rows, err := s.List(c.Context())
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
@@ -58,6 +68,10 @@ func (s *Service) Get(c fiber.Ctx) error {
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+
+	if !wantsJSON(c) {
+		return c.Redirect().To("/settings/" + strconv.FormatUint(id, 10) + "/edit")
 	}
 
 	row, err := s.GetByID(c.Context(), uint(id))
@@ -104,12 +118,12 @@ func (s *Service) GetCurrent(c fiber.Ctx) error {
 }
 
 func (s *Service) Create(c fiber.Ctx) error {
-	var req writeSettingsRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	in, err := parseCreateInput(c)
+	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	created, err := s.CreateVersion(c.Context(), req.Config)
+	created, err := s.CreateVersion(c.Context(), in.Config)
 	if err != nil {
 		if errors.Is(err, ErrInvalidConfig) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
@@ -120,6 +134,10 @@ func (s *Service) Create(c fiber.Ctx) error {
 	cfg, err := s.DecodeConfig(created)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if !wantsJSON(c) {
+		return c.Redirect().To("/settings/" + strconv.FormatUint(uint64(created.ID), 10) + "/edit")
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -136,12 +154,12 @@ func (s *Service) Patch(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
 	}
 
-	var req writeSettingsRequest
-	if err := c.Bind().JSON(&req); err != nil {
+	in, err := parseUpdateInput(c)
+	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	created, err := s.CreateVersionFromID(c.Context(), uint(id), req.Config)
+	created, err := s.CreateVersionFromID(c.Context(), uint(id), in.Config)
 	if err != nil {
 		if errors.Is(err, ErrSettingsNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, err.Error())
@@ -157,10 +175,97 @@ func (s *Service) Patch(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
+	if !wantsJSON(c) {
+		return c.Redirect().To("/settings/" + strconv.FormatUint(uint64(created.ID), 10) + "/edit")
+	}
+
 	return c.JSON(fiber.Map{
 		"id":         created.ID,
 		"version":    created.Version,
 		"is_current": created.IsCurrent,
 		"config":     cfg,
 	})
+}
+
+func (s *Service) Put(c fiber.Ctx) error {
+	return s.Patch(c)
+}
+
+func (s *Service) Delete(c fiber.Ctx) error {
+	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid id")
+	}
+
+	if err := s.DeleteByID(c.Context(), uint(id)); err != nil {
+		if errors.Is(err, ErrSettingsNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, err.Error())
+		}
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	if !wantsJSON(c) {
+		return c.Redirect().To("/settings")
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (s *Service) PostWithMethodOverride(c fiber.Ctx) error {
+	method := strings.ToUpper(strings.TrimSpace(c.FormValue("_method")))
+	if method == "PATCH" || method == "PUT" {
+		return s.Patch(c)
+	}
+	if method == "DELETE" {
+		return s.Delete(c)
+	}
+
+	return s.Create(c)
+}
+
+func wantsJSON(c fiber.Ctx) bool {
+	if strings.EqualFold(c.Query("format"), "json") {
+		return true
+	}
+
+	accept := strings.ToLower(c.Get("Accept"))
+	return strings.Contains(accept, "application/json")
+}
+
+func parseCreateInput(c fiber.Ctx) (createSettingsInput, error) {
+	return parseSettingsInput(c)
+}
+
+func parseUpdateInput(c fiber.Ctx) (createSettingsInput, error) {
+	return parseSettingsInput(c)
+}
+
+func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
+	contentType := strings.ToLower(c.Get("Content-Type"))
+	if strings.Contains(contentType, "application/json") {
+		var in createSettingsInput
+		if err := c.Bind().JSON(&in); err != nil {
+			return createSettingsInput{}, err
+		}
+		return in, nil
+	}
+
+	var in createSettingsInput
+	if err := c.Bind().Form(&in); err != nil {
+		return createSettingsInput{}, err
+	}
+
+	in.Config = models.SettingsConfig{
+		Layout: models.SettingsLayout{
+			Name: strings.TrimSpace(in.LayoutName),
+			Path: strings.TrimSpace(in.LayoutPath),
+		},
+		MediaSources: []models.SettingsMediaSource{{
+			Kind:  strings.TrimSpace(in.MediaKind),
+			URL:   strings.TrimSpace(in.MediaURL),
+			Label: strings.TrimSpace(in.MediaLabel),
+		}},
+	}
+
+	return in, nil
 }

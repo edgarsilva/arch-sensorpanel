@@ -18,39 +18,40 @@
         <section class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg">Create or edit</h2>
-            <form id="settings_form" class="space-y-4">
-              <label class="form-control w-full">
-                <span class="label-text mb-1">Layout</span>
+            <form id="settings_form" class="space-y-5">
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Layout</legend>
                 <select id="layout_name" class="select select-bordered w-full">
                   <option value="left">Left</option>
                   <option value="right">Right</option>
                   <option value="center">Center</option>
                 </select>
-              </label>
+              </fieldset>
 
-              <label class="form-control w-full">
-                <span class="label-text mb-1">Layout path (optional)</span>
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Layout path (optional)</legend>
                 <input id="layout_path" class="input input-bordered w-full" placeholder="/layouts/center-v2" />
-              </label>
+                <label class="label">Optional template/layout identifier.</label>
+              </fieldset>
 
-              <label class="form-control w-full">
-                <span class="label-text mb-1">Media kind</span>
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Media kind</legend>
                 <select id="media_kind" class="select select-bordered w-full">
                   <option value="youtube">youtube</option>
                   <option value="video">video</option>
                   <option value="playlist">playlist</option>
                 </select>
-              </label>
+              </fieldset>
 
-              <label class="form-control w-full">
-                <span class="label-text mb-1">Video URL or YouTube ID</span>
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Video URL or YouTube ID</legend>
                 <input id="media_url" class="input input-bordered w-full" placeholder="https://www.youtube.com/watch?v=AKfsikEXZHM" required />
-              </label>
+              </fieldset>
 
-              <label class="form-control w-full">
-                <span class="label-text mb-1">Media label (optional)</span>
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Media label (optional)</legend>
                 <input id="media_label" class="input input-bordered w-full" placeholder="Winter loop" />
-              </label>
+              </fieldset>
 
               <div class="flex items-center gap-3">
                 <button type="submit" class="btn btn-primary">Save version</button>
@@ -64,7 +65,7 @@
         <section class="card bg-base-100 shadow-sm">
           <div class="card-body">
             <h2 class="card-title text-lg">History</h2>
-            <div id="settings_list" class="space-y-2 text-sm"></div>
+            <ul id="settings_list" class="list bg-base-100 rounded-box border border-base-300 text-sm"></ul>
           </div>
         </section>
       </div>
@@ -79,6 +80,12 @@
         const match = window.location.pathname.match(/^\/settings\/(\d+)\/edit$/)
         return match ? Number(match[1]) : null
       })()
+
+      if (idFromPath) {
+        form.setAttribute("action", `/settings/${idFromPath}`)
+      } else {
+        form.setAttribute("action", "/settings")
+      }
 
       function toPayload() {
         return {
@@ -99,23 +106,33 @@
       }
 
       async function loadList() {
-        const res = await fetch("/api/settings")
+        const res = await fetch("/settings?format=json")
         const data = await res.json()
         const items = Array.isArray(data.items) ? data.items : []
 
-        listEl.innerHTML = ""
+        listEl.innerHTML = '<li class="p-4 pb-2 text-xs opacity-60 tracking-wide">Settings versions</li>'
+
+        if (items.length === 0) {
+          const empty = document.createElement("li")
+          empty.className = "list-row"
+          empty.innerHTML = '<div><div class="font-medium">No versions yet</div><div class="text-xs opacity-60">Create your first settings version.</div></div>'
+          listEl.appendChild(empty)
+          return
+        }
+
         for (const item of items) {
-          const row = document.createElement("div")
-          row.className = "rounded-lg border border-base-300 p-2"
-          const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm ml-2">current</span>' : ""
-          row.innerHTML = `<div class="flex items-center justify-between"><div><strong>v${item.version}</strong>${currentBadge}</div><a class="link" href="/settings/${item.id}/edit">edit</a></div><div class="text-xs text-base-content/70 mt-1">layout: ${item.config?.layout?.name || "--"}</div>`
+          const row = document.createElement("li")
+          row.className = "list-row"
+          const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm">current</span>' : '<span class="badge badge-ghost badge-sm">history</span>'
+          const mediaCount = Array.isArray(item.config?.media_sources) ? item.config.media_sources.length : 0
+          row.innerHTML = `<div class="flex flex-col"><div class="font-semibold">v${item.version}</div><div class="text-xs uppercase font-semibold opacity-60">layout ${item.config?.layout?.name || "--"} · media ${mediaCount}</div></div><div class="flex items-center justify-end gap-2">${currentBadge}<a class="btn btn-xs btn-ghost" href="/settings/${item.id}/edit">edit</a></div>`
           listEl.appendChild(row)
         }
       }
 
       async function loadEdit() {
         if (!idFromPath) return
-        const res = await fetch(`/api/settings/${idFromPath}`)
+        const res = await fetch(`/settings/${idFromPath}?format=json`)
         if (!res.ok) return
         const item = await res.json()
         document.getElementById("layout_name").value = item.config?.layout?.name || "left"
@@ -128,29 +145,37 @@
         }
       }
 
-      form.addEventListener("submit", async (e) => {
+      form.addEventListener("submit", (e) => {
         e.preventDefault()
         statusEl.textContent = "saving..."
 
-        const method = idFromPath ? "PATCH" : "POST"
-        const url = idFromPath ? `/api/settings/${idFromPath}` : "/api/settings"
+        const payload = toPayload()
+        const cfg = payload.config
 
-        const res = await fetch(url, {
-          method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(toPayload()),
-        })
+        const hidden = [
+          ["layout_name", cfg.layout.name],
+          ["layout_path", cfg.layout.path || ""],
+          ["media_kind", (cfg.media_sources[0] && cfg.media_sources[0].kind) || ""],
+          ["media_url", (cfg.media_sources[0] && cfg.media_sources[0].url) || ""],
+          ["media_label", (cfg.media_sources[0] && cfg.media_sources[0].label) || ""],
+        ]
 
-        if (!res.ok) {
-          const txt = await res.text()
-          statusEl.textContent = `error: ${txt}`
-          return
+        if (idFromPath) {
+          hidden.push(["_method", "PATCH"])
         }
 
-        const saved = await res.json()
-        statusEl.textContent = `saved version v${saved.version}`
-        window.history.replaceState({}, "", `/settings/${saved.id}/edit`)
-        await loadList()
+        for (const [name, value] of hidden) {
+          let input = form.querySelector(`input[type="hidden"][name="${name}"]`)
+          if (!input) {
+            input = document.createElement("input")
+            input.type = "hidden"
+            input.name = name
+            form.appendChild(input)
+          }
+          input.value = String(value)
+        }
+
+        form.submit()
       })
 
       Promise.all([loadList(), loadEdit()]).catch(() => {
