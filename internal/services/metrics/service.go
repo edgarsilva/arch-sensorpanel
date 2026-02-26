@@ -1,9 +1,10 @@
 package metrics
 
 import (
+	"time"
+
 	"sensorpanel/internal/sensors"
 	"sensorpanel/internal/server"
-	"time"
 )
 
 type cpuBusyReader interface {
@@ -73,7 +74,7 @@ type Snapshot struct {
 func New(s *server.Server, opts ...Option) *Service {
 	svc := &Service{
 		Server:         s,
-		sampleInterval: time.Second,
+		sampleInterval: 1 * time.Second,
 	}
 
 	for _, opt := range opts {

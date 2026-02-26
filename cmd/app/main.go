@@ -17,15 +17,11 @@ import (
 	"sensorpanel/internal/db"
 	"sensorpanel/internal/routes"
 	"sensorpanel/internal/server"
-	"sensorpanel/internal/services/settings"
 )
 
 func main() {
 	fmt.Println("🔧  Loading Env...")
-	env, err := appenv.Load()
-	if err != nil {
-		log.Fatalf("failed to load environment: %v", err)
-	}
+	env := appenv.New()
 
 	defer func() {
 		fmt.Println("✅ All cleanup tasks completed")
@@ -57,6 +53,7 @@ func main() {
 
 	fmt.Println("🚀  Initializing Server...")
 	s, err := server.New(
+		server.WithAppEnv(env),
 		server.WithDatabase(database),
 		server.WithPublicFS(os.DirFS("public")),
 	)
@@ -64,15 +61,11 @@ func main() {
 		log.Fatalf("failed to initialize server: %v", err)
 	}
 
-	_ = settings.New(s)
-
 	routes.RegisterServices(s)
-
-	listenAddr := env.ListenAddr()
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- s.Listen(listenAddr)
+		serveErr <- s.Listen(env.AppPort)
 	}()
 
 	select {

@@ -1,88 +1,27 @@
+// Package appenv provides a simple way to load/veriby/validate environment variables
+// in one place.
 package appenv
 
 import (
-	"fmt"
-	"os"
-	"strings"
+	"log"
 	"time"
+
+	"github.com/edgarsilva/simpleenv"
 )
 
 type Env struct {
-	AppEnv             string
-	AppPort            string
-	DatabaseURI        string
-	AppShutdownTimeout time.Duration
+	AppEnv             string        `env:"APP_ENV;oneof=development,test,staging,production"`
+	AppPort            int           `env:"APP_PORT;min=1;max=65535"`
+	DatabaseURI        string        `env:"DATABASE_URI"`
+	AppShutdownTimeout time.Duration `env:"APP_SHUTDOWN_TIMEOUT;optional;min=1s"`
 }
 
-func Load() (*Env, error) {
-	appEnv, err := require("APP_ENV")
+func New() *Env {
+	env := &Env{AppShutdownTimeout: 10 * time.Second}
+	err := simpleenv.Load(env)
 	if err != nil {
-		return nil, err
+		log.Fatal("failed to load environment variables:", err)
 	}
 
-	appPort, err := require("APP_PORT")
-	if err != nil {
-		return nil, err
-	}
-
-	databaseURI, err := require("DATABASE_URI")
-	if err != nil {
-		return nil, err
-	}
-
-	shutdownTimeout, err := durationOrDefault("APP_SHUTDOWN_TIMEOUT", 10*time.Second)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Env{
-		AppEnv:             appEnv,
-		AppPort:            appPort,
-		DatabaseURI:        databaseURI,
-		AppShutdownTimeout: shutdownTimeout,
-	}, nil
-}
-
-func (e *Env) ListenAddr() string {
-	if e == nil {
-		return ":9070"
-	}
-
-	port := strings.TrimSpace(e.AppPort)
-	if port == "" {
-		return ":9070"
-	}
-
-	if strings.HasPrefix(port, ":") {
-		return port
-	}
-
-	return ":" + port
-}
-
-func require(key string) (string, error) {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return "", fmt.Errorf("missing required environment variable: %s", key)
-	}
-
-	return value, nil
-}
-
-func durationOrDefault(key string, fallback time.Duration) (time.Duration, error) {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return 0, fmt.Errorf("invalid duration for %s: %w", key, err)
-	}
-
-	if parsed <= 0 {
-		return 0, fmt.Errorf("%s must be greater than 0", key)
-	}
-
-	return parsed, nil
+	return env
 }
