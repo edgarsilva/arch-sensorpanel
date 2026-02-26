@@ -2,7 +2,10 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"sensorpanel/internal/db"
@@ -12,77 +15,111 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrMediaSourceNotFound = errors.New("media source not found")
+var (
+	ErrSettingsNotFound = errors.New("settings not found")
+	ErrInvalidConfig    = errors.New("invalid settings config")
+)
 
 type Service struct {
 	*server.Server
-}
-
-type CreateMediaSourceInput struct {
-	Kind  models.MediaSourceKind
-	URL   string
-	Label string
 }
 
 func New(s *server.Server) *Service {
 	return &Service{Server: s}
 }
 
-func (s *Service) CreateMediaSource(ctx context.Context, in CreateMediaSourceInput) (models.MediaSource, error) {
-	mediaSource := models.MediaSource{
-		Kind:  in.Kind,
-		URL:   in.URL,
-		Label: in.Label,
-	}
-
-	if err := gorm.G[models.MediaSource](s.DB.Gorm).Create(ctx, &mediaSource); err != nil {
-		return models.MediaSource{}, db.WrapWithOp("create media source", err)
-	}
-
-	return mediaSource, nil
-}
-
-func (s *Service) ListMediaSources(ctx context.Context) ([]models.MediaSource, error) {
-	rows, err := gorm.G[models.MediaSource](s.DB.Gorm).Order("created_at DESC").Find(ctx)
+func (s *Service) List(ctx context.Context) ([]models.Settings, error) {
+	rows, err := gorm.G[models.Settings](s.DB.Gorm).Order("version DESC").Find(ctx)
 	if err != nil {
-		return nil, db.WrapWithOp("list media sources", err)
+		return nil, db.WrapWithOp("list settings", err)
 	}
 
 	return rows, nil
 }
 
-func (s *Service) GetActiveMediaSource(ctx context.Context) (*models.MediaSource, error) {
-	row, err := gorm.G[models.MediaSource](s.DB.Gorm).Where("is_active = ?", true).First(ctx)
+func (s *Service) GetByID(ctx context.Context, id uint) (*models.Settings, error) {
+	row, err := gorm.G[models.Settings](s.DB.Gorm).Where("id = ?", id).First(ctx)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrSettingsNotFound
 		}
-
-		return nil, db.WrapWithOp("get active media source", err)
+		return nil, db.WrapWithOp("get settings by id", err)
 	}
 
 	return &row, nil
 }
 
-func (s *Service) SetActiveMediaSource(ctx context.Context, id uint) (*models.MediaSource, error) {
-	err := s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+func (s *Service) GetCurrentRow(ctx context.Context) (*models.Settings, error) {
+	row, err := gorm.G[models.Settings](s.DB.Gorm).Where("is_current = ?", true).First(ctx)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSettingsNotFound
+		}
+		return nil, db.WrapWithOp("get current settings", err)
+	}
+
+	return &row, nil
+}
+
+func (s *Service) CreateVersion(ctx context.Context, config models.SettingsConfig) (*models.Settings, error) {
+	return s.createVersion(ctx, config)
+}
+
+func (s *Service) CreateVersionFromID(ctx context.Context, id uint, config models.SettingsConfig) (*models.Settings, error) {
+	if _, err := s.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	return s.createVersion(ctx, config)
+}
+
+func (s *Service) DecodeConfig(row *models.Settings) (models.SettingsConfig, error) {
+	if row == nil {
+		return models.SettingsConfig{}, ErrSettingsNotFound
+	}
+
+	var cfg models.SettingsConfig
+	if err := json.Unmarshal([]byte(row.ConfigJSON), &cfg); err != nil {
+		return models.SettingsConfig{}, db.WrapWithOp("decode settings config", err)
+	}
+
+	return cfg, nil
+}
+
+func (s *Service) createVersion(ctx context.Context, config models.SettingsConfig) (*models.Settings, error) {
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, db.WrapWithOp("marshal settings config", err)
+	}
+
+	var created models.Settings
+	err = s.DB.Gorm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var maxVersion int64
+		if err := tx.Model(&models.Settings{}).Select("COALESCE(MAX(version), 0)").Scan(&maxVersion).Error; err != nil {
+			return db.WrapWithOp("select max settings version", err)
+		}
+
 		now := time.Now().UTC()
-
-		if err := tx.Model(&models.MediaSource{}).
-			Where("is_active = ?", true).
-			Updates(map[string]any{"is_active": false, "updated_at": now}).Error; err != nil {
-			return db.WrapWithOp("clear active media source", err)
+		if err := tx.Model(&models.Settings{}).
+			Where("is_current = ?", true).
+			Updates(map[string]any{"is_current": false, "updated_at": now}).Error; err != nil {
+			return db.WrapWithOp("clear current settings", err)
 		}
 
-		result := tx.Model(&models.MediaSource{}).
-			Where("id = ?", id).
-			Updates(map[string]any{"is_active": true, "updated_at": now})
-		if result.Error != nil {
-			return db.WrapWithOp("set active media source", result.Error)
+		created = models.Settings{
+			Version:    maxVersion + 1,
+			IsCurrent:  true,
+			ConfigJSON: string(configJSON),
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		}
 
-		if result.RowsAffected == 0 {
-			return ErrMediaSourceNotFound
+		if err := gorm.G[models.Settings](tx).Create(ctx, &created); err != nil {
+			return db.WrapWithOp("create settings version", err)
 		}
 
 		return nil
@@ -91,10 +128,23 @@ func (s *Service) SetActiveMediaSource(ctx context.Context, id uint) (*models.Me
 		return nil, err
 	}
 
-	active, err := gorm.G[models.MediaSource](s.DB.Gorm.WithContext(ctx)).Where("id = ?", id).First(ctx)
-	if err != nil {
-		return nil, db.WrapWithOp("fetch active media source", err)
+	return &created, nil
+}
+
+func validateConfig(config models.SettingsConfig) error {
+	layout := strings.ToLower(strings.TrimSpace(config.Layout.Name))
+	if layout != "left" && layout != "right" && layout != "center" {
+		return fmt.Errorf("%w: unsupported layout %q", ErrInvalidConfig, config.Layout.Name)
 	}
 
-	return &active, nil
+	for i, source := range config.MediaSources {
+		if strings.TrimSpace(source.URL) == "" {
+			return fmt.Errorf("%w: media_sources[%d].url is required", ErrInvalidConfig, i)
+		}
+		if strings.TrimSpace(source.Kind) == "" {
+			return fmt.Errorf("%w: media_sources[%d].kind is required", ErrInvalidConfig, i)
+		}
+	}
+
+	return nil
 }

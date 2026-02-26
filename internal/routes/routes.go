@@ -6,6 +6,7 @@ import (
 
 	"sensorpanel/internal/server"
 	"sensorpanel/internal/services/metrics"
+	"sensorpanel/internal/services/settings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/static"
@@ -17,6 +18,7 @@ func RegisterServices(s *server.Server) {
 	}
 	PublicRoutes(s)
 	MetricsRoutes(s)
+	SettingsRoutes(s)
 }
 
 func PublicRoutes(s *server.Server) {
@@ -41,6 +43,24 @@ func PublicRoutes(s *server.Server) {
 		}
 		return c.Type("html").Send(telemetryHTML)
 	})
+}
+
+func SettingsRoutes(s *server.Server) {
+	if s == nil || s.App == nil {
+		return
+	}
+
+	settingsHandler := settings.New(s)
+
+	s.Get("/settings", settingsHandler.IndexPage)
+	s.Get("/settings/new", settingsHandler.IndexPage)
+	s.Get("/settings/:id/edit", settingsHandler.IndexPage)
+
+	s.Get("/api/settings", settingsHandler.Index)
+	s.Get("/api/settings/current", settingsHandler.GetCurrent)
+	s.Get("/api/settings/:id", settingsHandler.Get)
+	s.Post("/api/settings", settingsHandler.Create)
+	s.Patch("/api/settings/:id", settingsHandler.Patch)
 }
 
 func MetricsRoutes(s *server.Server) {
