@@ -188,6 +188,18 @@ func validateConfig(config models.SettingsConfig) error {
 		return fmt.Errorf("%w: unsupported video_align %q", ErrInvalidConfig, config.Layout.VideoAlign)
 	}
 
+	if config.Layout.MetricsScale != 0 && (config.Layout.MetricsScale < 50 || config.Layout.MetricsScale > 200) {
+		return fmt.Errorf("%w: metrics_scale_pct must be between 50 and 200", ErrInvalidConfig)
+	}
+
+	if config.Layout.MetricsOffsetX < -250 || config.Layout.MetricsOffsetX > 250 {
+		return fmt.Errorf("%w: metrics_offset_x must be between -250 and 250", ErrInvalidConfig)
+	}
+
+	if config.Layout.MetricsOffsetY < -250 || config.Layout.MetricsOffsetY > 250 {
+		return fmt.Errorf("%w: metrics_offset_y must be between -250 and 250", ErrInvalidConfig)
+	}
+
 	for i, source := range config.MediaSources {
 		if strings.TrimSpace(source.URL) == "" {
 			return fmt.Errorf("%w: media_sources[%d].url is required", ErrInvalidConfig, i)

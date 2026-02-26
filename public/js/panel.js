@@ -6,8 +6,21 @@ const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 
 let bootConfig = {
-  layout: { name: "left", overlay_layout: "column", theme: "lofi", video_fit: "cover", video_align: "center" },
+  layout: {
+    name: "left",
+    overlay_layout: "column",
+    theme: "lofi",
+    video_fit: "cover",
+    video_align: "center",
+    metrics_scale_pct: 100,
+    metrics_offset_x: 0,
+    metrics_offset_y: 0,
+  },
   media_sources: [],
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max)
 }
 
 function normalizeTheme(theme) {
@@ -76,9 +89,9 @@ function applyLayout(layoutConfig) {
   panel.className = "fixed inset-0 flex items-center z-50 pointer-events-none"
 
   if (overlayLayout === "row") {
-    slot.className = "flex flex-row items-center justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-100"
+    slot.className = "flex flex-row items-center justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2"
   } else {
-    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-100"
+    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2"
   }
 
   if (layout === "cover") {
@@ -98,6 +111,18 @@ function applyLayout(layoutConfig) {
   }
 
   panel.classList.add("justify-start")
+}
+
+function applyMetricsTuning(layoutConfig) {
+  const slot = document.getElementById("overlay_slot")
+  if (!slot) return
+
+  const scalePct = clamp(Number(layoutConfig && layoutConfig.metrics_scale_pct) || 100, 50, 200)
+  const offsetX = clamp(Number(layoutConfig && layoutConfig.metrics_offset_x) || 0, -250, 250)
+  const offsetY = clamp(Number(layoutConfig && layoutConfig.metrics_offset_y) || 0, -250, 250)
+
+  slot.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scalePct / 100})`
+  slot.style.transformOrigin = "center"
 }
 
 function extractVideoIdFromURL(rawURL) {
@@ -313,5 +338,6 @@ bootstrapSettings().finally(() => {
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
   applyLayout(bootConfig.layout)
+  applyMetricsTuning(bootConfig.layout)
   connectMetricsSocket()
 })

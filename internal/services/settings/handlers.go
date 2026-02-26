@@ -12,15 +12,18 @@ import (
 )
 
 type createSettingsInput struct {
-	Config        models.SettingsConfig `json:"config"`
-	LayoutName    string                `form:"layout_name"`
-	OverlayLayout string                `form:"overlay_layout"`
-	Theme         string                `form:"theme"`
-	VideoFit      string                `form:"video_fit"`
-	VideoAlign    string                `form:"video_align"`
-	MediaKind     string                `form:"media_kind"`
-	MediaURL      string                `form:"media_url"`
-	MediaLabel    string                `form:"media_label"`
+	Config         models.SettingsConfig `json:"config"`
+	LayoutName     string                `form:"layout_name"`
+	OverlayLayout  string                `form:"overlay_layout"`
+	Theme          string                `form:"theme"`
+	VideoFit       string                `form:"video_fit"`
+	VideoAlign     string                `form:"video_align"`
+	MetricsScale   string                `form:"metrics_scale_pct"`
+	MetricsOffsetX string                `form:"metrics_offset_x"`
+	MetricsOffsetY string                `form:"metrics_offset_y"`
+	MediaKind      string                `form:"media_kind"`
+	MediaURL       string                `form:"media_url"`
+	MediaLabel     string                `form:"media_label"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -264,11 +267,14 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 
 	in.Config = models.SettingsConfig{
 		Layout: models.SettingsLayout{
-			Name:          strings.TrimSpace(in.LayoutName),
-			OverlayLayout: strings.TrimSpace(in.OverlayLayout),
-			Theme:         strings.TrimSpace(in.Theme),
-			VideoFit:      strings.TrimSpace(in.VideoFit),
-			VideoAlign:    strings.TrimSpace(in.VideoAlign),
+			Name:           strings.TrimSpace(in.LayoutName),
+			OverlayLayout:  strings.TrimSpace(in.OverlayLayout),
+			Theme:          strings.TrimSpace(in.Theme),
+			VideoFit:       strings.TrimSpace(in.VideoFit),
+			VideoAlign:     strings.TrimSpace(in.VideoAlign),
+			MetricsScale:   parseIntOrZero(in.MetricsScale),
+			MetricsOffsetX: parseIntOrZero(in.MetricsOffsetX),
+			MetricsOffsetY: parseIntOrZero(in.MetricsOffsetY),
 		},
 		MediaSources: []models.SettingsMediaSource{{
 			Kind:  strings.TrimSpace(in.MediaKind),
@@ -278,4 +284,12 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 	}
 
 	return in, nil
+}
+
+func parseIntOrZero(raw string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0
+	}
+	return value
 }

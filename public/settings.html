@@ -22,6 +22,21 @@
             <h2 class="card-title text-lg">Create or edit</h2>
             <form id="settings_form" class="space-y-5" method="post">
               <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Theme</legend>
+                <select id="theme" class="select select-bordered w-full">
+                  <option value="cool">cool</option>
+                  <option value="winter">winter</option>
+                  <option value="corporate">corporate</option>
+                  <option value="nord">nord</option>
+                  <option value="aqua">aqua</option>
+                  <option value="lofi">lofi</option>
+                  <option value="business">business</option>
+                  <option value="dark">dark</option>
+                  <option value="dim">dim</option>
+                </select>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Overlay position</legend>
                 <select id="layout_name" class="select select-bordered w-full">
                   <option value="left">Left</option>
@@ -40,21 +55,6 @@
               </fieldset>
 
               <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Theme</legend>
-                <select id="theme" class="select select-bordered w-full">
-                  <option value="cool">cool</option>
-                  <option value="winter">winter</option>
-                  <option value="corporate">corporate</option>
-                  <option value="nord">nord</option>
-                  <option value="aqua">aqua</option>
-                  <option value="lofi">lofi</option>
-                  <option value="business">business</option>
-                  <option value="dark">dark</option>
-                  <option value="dim">dim</option>
-                </select>
-              </fieldset>
-
-              <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Video fit</legend>
                 <select id="video_fit" class="select select-bordered w-full">
                   <option value="cover">cover</option>
@@ -69,6 +69,24 @@
                   <option value="center">center</option>
                   <option value="right">right</option>
                 </select>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Metrics scale (%)</legend>
+                <input id="metrics_scale_pct" type="number" min="50" max="200" step="1" class="input input-bordered w-full" value="100" />
+                <label class="label">Range: 50 to 200</label>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Horizontal offset (px)</legend>
+                <input id="metrics_offset_x" type="number" min="-250" max="250" step="1" class="input input-bordered w-full" value="0" />
+                <label class="label">Range: -250px to 250px</label>
+              </fieldset>
+
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Vertical offset (px)</legend>
+                <input id="metrics_offset_y" type="number" min="-250" max="250" step="1" class="input input-bordered w-full" value="0" />
+                <label class="label">Range: -250px to 250px</label>
               </fieldset>
 
               <fieldset class="fieldset w-full">
@@ -133,6 +151,9 @@
               theme: document.getElementById("theme").value,
               video_fit: document.getElementById("video_fit").value,
               video_align: document.getElementById("video_align").value,
+              metrics_scale_pct: Number(document.getElementById("metrics_scale_pct").value || 100),
+              metrics_offset_x: Number(document.getElementById("metrics_offset_x").value || 0),
+              metrics_offset_y: Number(document.getElementById("metrics_offset_y").value || 0),
             },
             media_sources: [
               {
@@ -180,6 +201,9 @@
         document.getElementById("theme").value = item.config?.layout?.theme || "lofi"
         document.getElementById("video_fit").value = item.config?.layout?.video_fit || "cover"
         document.getElementById("video_align").value = item.config?.layout?.video_align || "center"
+        document.getElementById("metrics_scale_pct").value = item.config?.layout?.metrics_scale_pct || 100
+        document.getElementById("metrics_offset_x").value = item.config?.layout?.metrics_offset_x || 0
+        document.getElementById("metrics_offset_y").value = item.config?.layout?.metrics_offset_y || 0
         const firstMedia = Array.isArray(item.config?.media_sources) ? item.config.media_sources[0] : null
         if (firstMedia) {
           document.getElementById("media_kind").value = firstMedia.kind || "youtube"
@@ -201,6 +225,9 @@
           ["theme", cfg.layout.theme || "lofi"],
           ["video_fit", cfg.layout.video_fit || "cover"],
           ["video_align", cfg.layout.video_align || "center"],
+          ["metrics_scale_pct", String(cfg.layout.metrics_scale_pct || 100)],
+          ["metrics_offset_x", String(cfg.layout.metrics_offset_x || 0)],
+          ["metrics_offset_y", String(cfg.layout.metrics_offset_y || 0)],
           ["media_kind", (cfg.media_sources[0] && cfg.media_sources[0].kind) || ""],
           ["media_url", (cfg.media_sources[0] && cfg.media_sources[0].url) || ""],
           ["media_label", (cfg.media_sources[0] && cfg.media_sources[0].label) || ""],

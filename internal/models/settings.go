@@ -27,9 +27,12 @@ type SettingsMediaSource struct {
 }
 
 type SettingsLayout struct {
-	Name          string `json:"name"`
-	OverlayLayout string `json:"overlay_layout,omitempty"`
-	Theme         string `json:"theme,omitempty"`
-	VideoFit      string `json:"video_fit,omitempty"`
-	VideoAlign    string `json:"video_align,omitempty"`
+	Name           string `json:"name"`
+	OverlayLayout  string `json:"overlay_layout,omitempty"`
+	Theme          string `json:"theme,omitempty"`
+	VideoFit       string `json:"video_fit,omitempty"`
+	VideoAlign     string `json:"video_align,omitempty"`
+	MetricsScale   int    `json:"metrics_scale_pct,omitempty"`
+	MetricsOffsetX int    `json:"metrics_offset_x,omitempty"`
+	MetricsOffsetY int    `json:"metrics_offset_y,omitempty"`
 }
