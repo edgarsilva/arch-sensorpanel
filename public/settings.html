@@ -58,6 +58,14 @@
                 </select>
               </fieldset>
 
+              <fieldset class="fieldset w-full">
+                <legend class="fieldset-legend">Infinite video playback</legend>
+                <label class="label cursor-pointer justify-start gap-3">
+                  <input id="infinite_video_playback" type="checkbox" class="toggle toggle-primary" />
+                  <span class="label-text">Loops video playback so videos appear go on forever, infinite playback.</span>
+                </label>
+              </fieldset>
+
               <h3 class="mt-5 mb-1 border-t border-base-300/70 pt-4 text-sm font-semibold uppercase tracking-wide text-base-content/70">Overlay</h3>
 
               <fieldset class="fieldset w-full">
@@ -76,7 +84,7 @@
               </fieldset>
 
               <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Overlay position</legend>
+                <legend class="fieldset-legend">Position</legend>
                 <select id="layout_name" class="select select-bordered w-full">
                   <option value="left">Left</option>
                   <option value="right">Right</option>
@@ -86,12 +94,37 @@
               </fieldset>
 
               <fieldset class="fieldset w-full">
-                <legend class="fieldset-legend">Overlay layout</legend>
+                <legend class="fieldset-legend">Layout</legend>
                 <select id="overlay_layout" class="select select-bordered w-full">
                   <option value="column">Column</option>
                   <option value="row">Row</option>
                 </select>
               </fieldset>
+
+              <details class="collapse collapse-arrow border border-base-300 bg-base-100">
+                <summary class="collapse-title text-xs font-semibold uppercase tracking-wide text-base-content/60">Advanced</summary>
+                <div class="collapse-content space-y-3">
+                  <fieldset class="fieldset w-full">
+                    <legend class="fieldset-legend">Padding top</legend>
+                    <input id="overlay_padding_top" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                  </fieldset>
+
+                  <fieldset class="fieldset w-full">
+                    <legend class="fieldset-legend">Padding right</legend>
+                    <input id="overlay_padding_right" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                  </fieldset>
+
+                  <fieldset class="fieldset w-full">
+                    <legend class="fieldset-legend">Padding bottom</legend>
+                    <input id="overlay_padding_bottom" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                  </fieldset>
+
+                  <fieldset class="fieldset w-full">
+                    <legend class="fieldset-legend">Padding left</legend>
+                    <input id="overlay_padding_left" type="range" min="0" max="100" step="1" value="0" class="range range-xs" />
+                  </fieldset>
+                </div>
+              </details>
 
               <h3 class="mt-5 mb-1 border-t border-base-300/70 pt-4 text-sm font-semibold uppercase tracking-wide text-base-content/70">Metrics</h3>
 
@@ -157,6 +190,11 @@
               theme: document.getElementById("theme").value,
               video_fit: document.getElementById("video_fit").value,
               video_align: document.getElementById("video_align").value,
+              infinite_video_playback: document.getElementById("infinite_video_playback").checked,
+              overlay_padding_top: Number(document.getElementById("overlay_padding_top").value || 0),
+              overlay_padding_right: Number(document.getElementById("overlay_padding_right").value || 0),
+              overlay_padding_bottom: Number(document.getElementById("overlay_padding_bottom").value || 0),
+              overlay_padding_left: Number(document.getElementById("overlay_padding_left").value || 0),
               metrics_scale_pct: Number(document.getElementById("metrics_scale_pct").value || 100),
               metrics_offset_x: Number(document.getElementById("metrics_offset_x").value || 0),
               metrics_offset_y: Number(document.getElementById("metrics_offset_y").value || 0),
@@ -208,6 +246,11 @@
         document.getElementById("theme").value = item.config?.layout?.theme || "lofi"
         document.getElementById("video_fit").value = item.config?.layout?.video_fit || "cover"
         document.getElementById("video_align").value = item.config?.layout?.video_align || "center"
+        document.getElementById("infinite_video_playback").checked = !!item.config?.layout?.infinite_video_playback
+        document.getElementById("overlay_padding_top").value = item.config?.layout?.overlay_padding_top || 0
+        document.getElementById("overlay_padding_right").value = item.config?.layout?.overlay_padding_right || 0
+        document.getElementById("overlay_padding_bottom").value = item.config?.layout?.overlay_padding_bottom || 0
+        document.getElementById("overlay_padding_left").value = item.config?.layout?.overlay_padding_left || 0
         document.getElementById("metrics_scale_pct").value = item.config?.layout?.metrics_scale_pct || 100
         document.getElementById("metrics_offset_x").value = item.config?.layout?.metrics_offset_x || 0
         document.getElementById("metrics_offset_y").value = item.config?.layout?.metrics_offset_y || 0
@@ -232,6 +275,11 @@
           ["theme", cfg.layout.theme || "lofi"],
           ["video_fit", cfg.layout.video_fit || "cover"],
           ["video_align", cfg.layout.video_align || "center"],
+          ["infinite_video_playback", cfg.layout.infinite_video_playback ? "true" : "false"],
+          ["overlay_padding_top", String(cfg.layout.overlay_padding_top || 0)],
+          ["overlay_padding_right", String(cfg.layout.overlay_padding_right || 0)],
+          ["overlay_padding_bottom", String(cfg.layout.overlay_padding_bottom || 0)],
+          ["overlay_padding_left", String(cfg.layout.overlay_padding_left || 0)],
           ["metrics_scale_pct", String(cfg.layout.metrics_scale_pct || 100)],
           ["metrics_offset_x", String(cfg.layout.metrics_offset_x || 0)],
           ["metrics_offset_y", String(cfg.layout.metrics_offset_y || 0)],

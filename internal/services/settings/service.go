@@ -188,6 +188,22 @@ func validateConfig(config models.SettingsConfig) error {
 		return fmt.Errorf("%w: unsupported video_align %q", ErrInvalidConfig, config.Layout.VideoAlign)
 	}
 
+	if config.Layout.OverlayPaddingTop < 0 || config.Layout.OverlayPaddingTop > 100 {
+		return fmt.Errorf("%w: overlay_padding_top must be between 0 and 100", ErrInvalidConfig)
+	}
+
+	if config.Layout.OverlayPaddingRight < 0 || config.Layout.OverlayPaddingRight > 100 {
+		return fmt.Errorf("%w: overlay_padding_right must be between 0 and 100", ErrInvalidConfig)
+	}
+
+	if config.Layout.OverlayPaddingBottom < 0 || config.Layout.OverlayPaddingBottom > 100 {
+		return fmt.Errorf("%w: overlay_padding_bottom must be between 0 and 100", ErrInvalidConfig)
+	}
+
+	if config.Layout.OverlayPaddingLeft < 0 || config.Layout.OverlayPaddingLeft > 100 {
+		return fmt.Errorf("%w: overlay_padding_left must be between 0 and 100", ErrInvalidConfig)
+	}
+
 	if config.Layout.MetricsScale != 0 && (config.Layout.MetricsScale < 50 || config.Layout.MetricsScale > 200) {
 		return fmt.Errorf("%w: metrics_scale_pct must be between 50 and 200", ErrInvalidConfig)
 	}

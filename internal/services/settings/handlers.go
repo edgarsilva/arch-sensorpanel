@@ -13,19 +13,24 @@ import (
 )
 
 type createSettingsInput struct {
-	Config         models.SettingsConfig `json:"config"`
-	ConfigName     string                `form:"config_name"`
-	LayoutName     string                `form:"layout_name"`
-	OverlayLayout  string                `form:"overlay_layout"`
-	Theme          string                `form:"theme"`
-	VideoFit       string                `form:"video_fit"`
-	VideoAlign     string                `form:"video_align"`
-	MetricsScale   string                `form:"metrics_scale_pct"`
-	MetricsOffsetX string                `form:"metrics_offset_x"`
-	MetricsOffsetY string                `form:"metrics_offset_y"`
-	MediaKind      string                `form:"media_kind"`
-	MediaURL       string                `form:"media_url"`
-	MediaLabel     string                `form:"media_label"`
+	Config                models.SettingsConfig `json:"config"`
+	ConfigName            string                `form:"config_name"`
+	LayoutName            string                `form:"layout_name"`
+	OverlayLayout         string                `form:"overlay_layout"`
+	Theme                 string                `form:"theme"`
+	VideoFit              string                `form:"video_fit"`
+	VideoAlign            string                `form:"video_align"`
+	InfiniteVideoPlayback string                `form:"infinite_video_playback"`
+	OverlayPaddingTop     string                `form:"overlay_padding_top"`
+	OverlayPaddingRight   string                `form:"overlay_padding_right"`
+	OverlayPaddingBottom  string                `form:"overlay_padding_bottom"`
+	OverlayPaddingLeft    string                `form:"overlay_padding_left"`
+	MetricsScale          string                `form:"metrics_scale_pct"`
+	MetricsOffsetX        string                `form:"metrics_offset_x"`
+	MetricsOffsetY        string                `form:"metrics_offset_y"`
+	MediaKind             string                `form:"media_kind"`
+	MediaURL              string                `form:"media_url"`
+	MediaLabel            string                `form:"media_label"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -298,14 +303,19 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 	in.Config = models.SettingsConfig{
 		Name: strings.TrimSpace(in.ConfigName),
 		Layout: models.SettingsLayout{
-			Name:           strings.TrimSpace(in.LayoutName),
-			OverlayLayout:  strings.TrimSpace(in.OverlayLayout),
-			Theme:          strings.TrimSpace(in.Theme),
-			VideoFit:       strings.TrimSpace(in.VideoFit),
-			VideoAlign:     strings.TrimSpace(in.VideoAlign),
-			MetricsScale:   parseIntOrZero(in.MetricsScale),
-			MetricsOffsetX: parseIntOrZero(in.MetricsOffsetX),
-			MetricsOffsetY: parseIntOrZero(in.MetricsOffsetY),
+			Name:                  strings.TrimSpace(in.LayoutName),
+			OverlayLayout:         strings.TrimSpace(in.OverlayLayout),
+			Theme:                 strings.TrimSpace(in.Theme),
+			VideoFit:              strings.TrimSpace(in.VideoFit),
+			VideoAlign:            strings.TrimSpace(in.VideoAlign),
+			InfiniteVideoPlayback: parseBoolForm(in.InfiniteVideoPlayback),
+			OverlayPaddingTop:     parseIntOrZero(in.OverlayPaddingTop),
+			OverlayPaddingRight:   parseIntOrZero(in.OverlayPaddingRight),
+			OverlayPaddingBottom:  parseIntOrZero(in.OverlayPaddingBottom),
+			OverlayPaddingLeft:    parseIntOrZero(in.OverlayPaddingLeft),
+			MetricsScale:          parseIntOrZero(in.MetricsScale),
+			MetricsOffsetX:        parseIntOrZero(in.MetricsOffsetX),
+			MetricsOffsetY:        parseIntOrZero(in.MetricsOffsetY),
 		},
 		MediaSources: []models.SettingsMediaSource{{
 			Kind:  strings.TrimSpace(in.MediaKind),
@@ -323,4 +333,9 @@ func parseIntOrZero(raw string) int {
 		return 0
 	}
 	return value
+}
+
+func parseBoolForm(raw string) bool {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	return value == "true" || value == "1" || value == "on" || value == "yes"
 }

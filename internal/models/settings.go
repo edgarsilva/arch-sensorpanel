@@ -28,12 +28,17 @@ type SettingsMediaSource struct {
 }
 
 type SettingsLayout struct {
-	Name           string `json:"name"`
-	OverlayLayout  string `json:"overlay_layout,omitempty"`
-	Theme          string `json:"theme,omitempty"`
-	VideoFit       string `json:"video_fit,omitempty"`
-	VideoAlign     string `json:"video_align,omitempty"`
-	MetricsScale   int    `json:"metrics_scale_pct,omitempty"`
-	MetricsOffsetX int    `json:"metrics_offset_x,omitempty"`
-	MetricsOffsetY int    `json:"metrics_offset_y,omitempty"`
+	Name                  string `json:"name"`
+	OverlayLayout         string `json:"overlay_layout,omitempty"`
+	Theme                 string `json:"theme,omitempty"`
+	VideoFit              string `json:"video_fit,omitempty"`
+	VideoAlign            string `json:"video_align,omitempty"`
+	InfiniteVideoPlayback bool   `json:"infinite_video_playback,omitempty"`
+	OverlayPaddingTop     int    `json:"overlay_padding_top,omitempty"`
+	OverlayPaddingRight   int    `json:"overlay_padding_right,omitempty"`
+	OverlayPaddingBottom  int    `json:"overlay_padding_bottom,omitempty"`
+	OverlayPaddingLeft    int    `json:"overlay_padding_left,omitempty"`
+	MetricsScale          int    `json:"metrics_scale_pct,omitempty"`
+	MetricsOffsetX        int    `json:"metrics_offset_x,omitempty"`
+	MetricsOffsetY        int    `json:"metrics_offset_y,omitempty"`
 }

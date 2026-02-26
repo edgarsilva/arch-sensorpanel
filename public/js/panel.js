@@ -5,6 +5,8 @@ let mediaMode = { kind: "youtube", videoId: "", playlistId: "" }
 const RESTART_THRESHOLD = 0.5
 const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
+const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
+const SETTINGS_RELOAD_DELAY_MS = 350
 
 let bootConfig = {
   layout: {
@@ -13,12 +15,19 @@ let bootConfig = {
     theme: "lofi",
     video_fit: "cover",
     video_align: "center",
+    infinite_video_playback: false,
+    overlay_padding_top: 0,
+    overlay_padding_right: 0,
+    overlay_padding_bottom: 0,
+    overlay_padding_left: 0,
     metrics_scale_pct: 100,
     metrics_offset_x: 0,
     metrics_offset_y: 0,
   },
   media_sources: [],
 }
+let bootSettingsVersion = 0
+let settingsReloadScheduled = false
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
@@ -126,6 +135,26 @@ function applyMetricsTuning(layoutConfig) {
   slot.style.transformOrigin = "center"
 }
 
+function applyOverlayPadding(layoutConfig) {
+  const slot = document.getElementById("overlay_slot")
+  if (!slot) return
+
+  const layout = normalizeOverlayPosition(layoutConfig && layoutConfig.name)
+  const extraTop = clamp(Number(layoutConfig && layoutConfig.overlay_padding_top) || 0, 0, 100)
+  const extraRight = clamp(Number(layoutConfig && layoutConfig.overlay_padding_right) || 0, 0, 100)
+  const extraBottom = clamp(Number(layoutConfig && layoutConfig.overlay_padding_bottom) || 0, 0, 100)
+  const extraLeft = clamp(Number(layoutConfig && layoutConfig.overlay_padding_left) || 0, 0, 100)
+
+  const base = layout === "cover"
+    ? { top: 24, right: 40, bottom: 24, left: 40 }
+    : { top: 8, right: 32, bottom: 8, left: 32 }
+
+  slot.style.paddingTop = `${base.top + extraTop}px`
+  slot.style.paddingRight = `${base.right + extraRight}px`
+  slot.style.paddingBottom = `${base.bottom + extraBottom}px`
+  slot.style.paddingLeft = `${base.left + extraLeft}px`
+}
+
 function extractVideoIdFromURL(rawURL) {
   if (!rawURL) return ""
   try {
@@ -206,6 +235,10 @@ function resolveVideoId() {
   return mediaMode.videoId || DEFAULT_VIDEO_ID
 }
 
+function isInfiniteVideoPlaybackEnabled() {
+  return !!(bootConfig.layout && bootConfig.layout.infinite_video_playback)
+}
+
 async function bootstrapSettings() {
   try {
     const res = await fetch("/api/settings/current", {
@@ -215,7 +248,42 @@ async function bootstrapSettings() {
     const payload = await res.json()
     if (!payload || !payload.config) return
     bootConfig = payload.config
+    bootSettingsVersion = Number(payload.version) || 0
   } catch (_) {
+  }
+}
+
+function scheduleSettingsReload() {
+  if (settingsReloadScheduled) return
+  settingsReloadScheduled = true
+  setTimeout(() => {
+    window.location.reload()
+  }, SETTINGS_RELOAD_DELAY_MS)
+}
+
+function connectSettingsSocket() {
+  const ws = new WebSocket(SETTINGS_WS_URL)
+
+  ws.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data)
+      if (!payload || payload.type !== "settings.updated") return
+
+      const incomingVersion = Number(payload.version) || 0
+      if (incomingVersion === 0 || incomingVersion > bootSettingsVersion) {
+        scheduleSettingsReload()
+      }
+    } catch (_) {
+    }
+  }
+
+  ws.onerror = () => {
+    ws.close()
+  }
+
+  ws.onclose = () => {
+    if (settingsReloadScheduled) return
+    setTimeout(connectSettingsSocket, 2000)
   }
 }
 
@@ -232,7 +300,6 @@ function onYouTubeIframeAPIReady() {
   if (mediaMode.kind === "playlist" && mediaMode.playlistId) {
     playerVars.listType = "playlist"
     playerVars.list = mediaMode.playlistId
-    playerVars.loop = 1
   }
 
   player = new YT.Player("player", {
@@ -247,21 +314,24 @@ function onYouTubeIframeAPIReady() {
 
 function onPlayerReady(e) {
   e.target.playVideo()
-  if (mediaMode.kind !== "playlist") {
+  if (isInfiniteVideoPlaybackEnabled()) {
     startLoopGuard()
   }
 }
 
 function onPlayerStateChange(e) {
-  if (e.data === YT.PlayerState.PLAYING && mediaMode.kind !== "playlist") {
-    startLoopGuard()
+  if (e.data === YT.PlayerState.PLAYING) {
+    if (isInfiniteVideoPlaybackEnabled()) {
+      startLoopGuard()
+    } else {
+      stopLoopGuard()
+    }
   }
 
   if (e.data === YT.PlayerState.ENDED) {
-    if (mediaMode.kind === "playlist") {
-      return
+    if (isInfiniteVideoPlaybackEnabled()) {
+      restart()
     }
-    restart()
   }
 }
 
@@ -400,8 +470,10 @@ bootstrapSettings().finally(() => {
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
   applyLayout(bootConfig.layout)
+  applyOverlayPadding(bootConfig.layout)
   applyMetricsTuning(bootConfig.layout)
   setPlaylistControlsVisible(mediaMode.kind === "playlist")
   bindPlaylistControls()
+  connectSettingsSocket()
   connectMetricsSocket()
 })
