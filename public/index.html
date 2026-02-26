@@ -15,8 +15,25 @@
         overflow: hidden;
       }
 
+      .video-cover {
+        display: flex;
+        align-items: center;
+      }
+
+      .video-cover.video-align-left {
+        justify-content: flex-start;
+      }
+
+      .video-cover.video-align-center {
+        justify-content: center;
+      }
+
+      .video-cover.video-align-right {
+        justify-content: flex-end;
+      }
+
       /* 16:9 cover math */
-      .video-cover iframe {
+      .video-cover.video-fit-cover iframe {
         position: absolute;
         top: 50%;
         left: 50%;
@@ -29,6 +46,15 @@
         min-height: 56.25vw; /* 9 / 16 * 100 */
 
         transform: translate(-50%, -50%);
+        border: 0;
+      }
+
+      .video-cover.video-fit-contain iframe {
+        position: relative;
+        width: 100vw;
+        height: 56.25vw;
+        max-height: 100vh;
+        max-width: 177.78vh;
         border: 0;
       }
 
@@ -63,7 +89,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   </head>
   <body>
-    <div class="video-cover fixed inset-0 overflow-hidden">
+    <div class="video-cover video-fit-cover video-align-center fixed inset-0 overflow-hidden">
       <div id="player"></div>
     </div>
 
@@ -77,8 +103,8 @@
       </div>
     </div>
 
-    <div id="overlay_panel" class="fixed inset-0 flex items-center z-50 pointer-events-none justify-start">
-      <div id="overlay_slot" class="flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150 translate-x-28">
+    <div id="overlay_panel" class="fixed inset-0 flex items-center z-50 pointer-events-none justify-start border-2 border-red-300">
+      <div id="overlay_slot" class="flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-100 border border-green-500">
         <div class="flex items-center">
           <!-- CPU Power (RADIAL) -->
           <div class="flex flex-col items-center mr-1">

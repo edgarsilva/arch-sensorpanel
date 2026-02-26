@@ -43,6 +43,10 @@ func PublicRoutes(s *server.Server) {
 		}
 		return c.Type("html").Send(telemetryHTML)
 	})
+
+	s.Get("/favicon.ico", func(c fiber.Ctx) error {
+		return c.Redirect().To("/public/favicon.png")
+	})
 }
 
 func SettingsRoutes(s *server.Server) {

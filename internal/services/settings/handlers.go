@@ -12,12 +12,15 @@ import (
 )
 
 type createSettingsInput struct {
-	Config     models.SettingsConfig `json:"config"`
-	LayoutName string                `form:"layout_name"`
-	LayoutPath string                `form:"layout_path"`
-	MediaKind  string                `form:"media_kind"`
-	MediaURL   string                `form:"media_url"`
-	MediaLabel string                `form:"media_label"`
+	Config        models.SettingsConfig `json:"config"`
+	LayoutName    string                `form:"layout_name"`
+	OverlayLayout string                `form:"overlay_layout"`
+	Theme         string                `form:"theme"`
+	VideoFit      string                `form:"video_fit"`
+	VideoAlign    string                `form:"video_align"`
+	MediaKind     string                `form:"media_kind"`
+	MediaURL      string                `form:"media_url"`
+	MediaLabel    string                `form:"media_label"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -261,8 +264,11 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 
 	in.Config = models.SettingsConfig{
 		Layout: models.SettingsLayout{
-			Name: strings.TrimSpace(in.LayoutName),
-			Path: strings.TrimSpace(in.LayoutPath),
+			Name:          strings.TrimSpace(in.LayoutName),
+			OverlayLayout: strings.TrimSpace(in.OverlayLayout),
+			Theme:         strings.TrimSpace(in.Theme),
+			VideoFit:      strings.TrimSpace(in.VideoFit),
+			VideoAlign:    strings.TrimSpace(in.VideoAlign),
 		},
 		MediaSources: []models.SettingsMediaSource{{
 			Kind:  strings.TrimSpace(in.MediaKind),

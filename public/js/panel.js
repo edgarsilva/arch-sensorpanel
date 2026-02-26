@@ -6,8 +6,42 @@ const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 
 let bootConfig = {
-  layout: { name: "left", path: "" },
+  layout: { name: "left", overlay_layout: "column", theme: "lofi", video_fit: "cover", video_align: "center" },
   media_sources: [],
+}
+
+function normalizeTheme(theme) {
+  const value = String(theme || "lofi").toLowerCase()
+  const supported = new Set(["cool", "winter", "corporate", "nord", "aqua", "lofi", "business", "dark", "dim"])
+  return supported.has(value) ? value : "lofi"
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", normalizeTheme(theme))
+}
+
+function normalizeVideoFit(value) {
+  const fit = String(value || "cover").toLowerCase()
+  if (fit === "contain") return "contain"
+  return "cover"
+}
+
+function normalizeVideoAlign(value) {
+  const align = String(value || "center").toLowerCase()
+  if (align === "left" || align === "right") return align
+  return "center"
+}
+
+function applyVideoLayout(layoutConfig) {
+  const wrap = document.querySelector(".video-cover")
+  if (!wrap) return
+
+  const fit = normalizeVideoFit(layoutConfig && layoutConfig.video_fit)
+  const align = normalizeVideoAlign(layoutConfig && layoutConfig.video_align)
+
+  wrap.classList.remove("video-fit-cover", "video-fit-contain", "video-align-left", "video-align-center", "video-align-right")
+  wrap.classList.add(fit === "contain" ? "video-fit-contain" : "video-fit-cover")
+  wrap.classList.add(`video-align-${align}`)
 }
 
 function tempColorForPct(temp, max = 95, min = 35) {
@@ -16,36 +50,54 @@ function tempColorForPct(temp, max = 95, min = 35) {
   return `hsl(${hue}, 85%, 55%)`
 }
 
-function normalizeLayout(layoutName) {
+function normalizeOverlayPosition(layoutName) {
   const name = String(layoutName || "left").toLowerCase()
-  if (name === "right" || name === "center") {
+  if (name === "right" || name === "center" || name === "cover") {
     return name
   }
   return "left"
 }
 
-function applyLayout(layoutName) {
+function normalizeOverlayLayout(layoutValue) {
+  const value = String(layoutValue || "column").toLowerCase()
+  if (value === "row") {
+    return "row"
+  }
+  return "column"
+}
+
+function applyLayout(layoutConfig) {
   const panel = document.getElementById("overlay_panel")
   const slot = document.getElementById("overlay_slot")
   if (!panel || !slot) return
 
-  const layout = normalizeLayout(layoutName)
+  const layout = normalizeOverlayPosition(layoutConfig && layoutConfig.name)
+  const overlayLayout = normalizeOverlayLayout(layoutConfig && layoutConfig.overlay_layout)
   panel.className = "fixed inset-0 flex items-center z-50 pointer-events-none"
+
+  if (overlayLayout === "row") {
+    slot.className = "flex flex-row items-center justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-100"
+  } else {
+    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-100"
+  }
+
+  if (layout === "cover") {
+    panel.classList.add("justify-center")
+    slot.className = `flex ${overlayLayout === "row" ? "flex-row items-center" : "flex-col items-start"} justify-center gap-6 h-full w-full bg-white/25 px-10 py-6`
+    return
+  }
 
   if (layout === "right") {
     panel.classList.add("justify-end")
-    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150 -translate-x-28"
     return
   }
 
   if (layout === "center") {
     panel.classList.add("justify-center")
-    slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150"
     return
   }
 
   panel.classList.add("justify-start")
-  slot.className = "flex flex-col items-start justify-center gap-6 h-full bg-white/35 rounded-2xl px-8 py-2 scale-150 translate-x-28"
 }
 
 function extractVideoIdFromURL(rawURL) {
@@ -258,6 +310,8 @@ function connectMetricsSocket() {
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady
 
 bootstrapSettings().finally(() => {
-  applyLayout(bootConfig.layout && bootConfig.layout.name)
+  applyTheme(bootConfig.layout && bootConfig.layout.theme)
+  applyVideoLayout(bootConfig.layout)
+  applyLayout(bootConfig.layout)
   connectMetricsSocket()
 })

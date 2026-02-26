@@ -155,8 +155,37 @@ func (s *Service) createVersion(ctx context.Context, config models.SettingsConfi
 
 func validateConfig(config models.SettingsConfig) error {
 	layout := strings.ToLower(strings.TrimSpace(config.Layout.Name))
-	if layout != "left" && layout != "right" && layout != "center" {
+	if layout != "left" && layout != "right" && layout != "center" && layout != "cover" {
 		return fmt.Errorf("%w: unsupported layout %q", ErrInvalidConfig, config.Layout.Name)
+	}
+
+	overlayLayout := strings.ToLower(strings.TrimSpace(config.Layout.OverlayLayout))
+	if overlayLayout != "" && overlayLayout != "column" && overlayLayout != "row" {
+		return fmt.Errorf("%w: unsupported overlay_layout %q", ErrInvalidConfig, config.Layout.OverlayLayout)
+	}
+
+	theme := strings.ToLower(strings.TrimSpace(config.Layout.Theme))
+	if theme != "" &&
+		theme != "cool" &&
+		theme != "winter" &&
+		theme != "corporate" &&
+		theme != "nord" &&
+		theme != "aqua" &&
+		theme != "lofi" &&
+		theme != "business" &&
+		theme != "dark" &&
+		theme != "dim" {
+		return fmt.Errorf("%w: unsupported theme %q", ErrInvalidConfig, config.Layout.Theme)
+	}
+
+	videoFit := strings.ToLower(strings.TrimSpace(config.Layout.VideoFit))
+	if videoFit != "" && videoFit != "cover" && videoFit != "contain" {
+		return fmt.Errorf("%w: unsupported video_fit %q", ErrInvalidConfig, config.Layout.VideoFit)
+	}
+
+	videoAlign := strings.ToLower(strings.TrimSpace(config.Layout.VideoAlign))
+	if videoAlign != "" && videoAlign != "left" && videoAlign != "center" && videoAlign != "right" {
+		return fmt.Errorf("%w: unsupported video_align %q", ErrInvalidConfig, config.Layout.VideoAlign)
 	}
 
 	for i, source := range config.MediaSources {

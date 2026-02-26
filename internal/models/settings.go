@@ -27,6 +27,9 @@ type SettingsMediaSource struct {
 }
 
 type SettingsLayout struct {
-	Name string `json:"name"`
-	Path string `json:"path,omitempty"`
+	Name          string `json:"name"`
+	OverlayLayout string `json:"overlay_layout,omitempty"`
+	Theme         string `json:"theme,omitempty"`
+	VideoFit      string `json:"video_fit,omitempty"`
+	VideoAlign    string `json:"video_align,omitempty"`
 }
