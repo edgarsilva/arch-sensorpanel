@@ -78,10 +78,15 @@ Database migrations are applied automatically at startup.
 Assuming default `APP_PORT=9070`:
 
 - Main overlay: `http://localhost:9070/`
-- Settings editor: `http://localhost:9070/settings`
-- Telemetry debug page: `http://localhost:9070/telemetry`
-- Metrics JSON: `http://localhost:9070/metrics`
+  <img width="1890" height="541" alt="screenshot-2026-02-26_19-14-06" src="https://github.com/user-attachments/assets/d2d2304d-e4c0-4cac-befe-e2146b2d78e8" />
 
+- Settings editor: `http://localhost:9070/settings`
+  <img width="1664" height="2064" alt="screenshot-2026-02-26_19-08-33" src="https://github.com/user-attachments/assets/25080ddb-f36a-465e-a349-b0ed19b1806f" />
+
+- Telemetry debug page: `http://localhost:9070/telemetry`
+  <img width="1721" height="1748" alt="screenshot-2026-02-26_19-10-27" src="https://github.com/user-attachments/assets/1ddff268-cdee-4b48-a4c0-2a3c6f76090c" />
+
+- Metrics JSON: `http://localhost:9070/metrics`
 ---
 
 ## Customization You Can Control
@@ -131,6 +136,11 @@ All of these are editable in the settings page and persisted as versioned record
 2. Adjust media/overlay/metrics controls
 3. Click **Save version**
 4. Panel reloads and applies the new current version
+ 
+<img width="1664" height="2064" alt="screenshot-2026-02-26_19-08-33" src="https://github.com/user-attachments/assets/d8eea306-9c1c-4c99-bad0-beca60f52970" />
+
+<img width="1416" height="1421" alt="screenshot-2026-02-26_19-08-47" src="https://github.com/user-attachments/assets/21029a06-2e93-414a-9b16-31f6891175ea" />
+
 
 ### Option B: Use the API
 
