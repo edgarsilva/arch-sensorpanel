@@ -100,6 +100,8 @@ If `sensorpanel` is not in your PATH yet:
 bindd = SUPER CTRL, P, Launch SensorPanel, exec, ~/.config/hypr/scripts/launch-sensor-panel.sh
 ```
 
+The `launch-sensor-panel.sh` script is shown in the Hyprland Extras section below.
+
 5. Add a window rule so the kiosk window opens on your small monitor workspace.
 
 ---
