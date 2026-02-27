@@ -1,139 +1,192 @@
 # Sensor Panel HUD
 
-A lightweight Linux hardware sensor panel and HUD overlay designed for kiosk and
-dashboard setups. It exposes normalized CPU and GPU metrics via a small Go
-(Fiber) API and renders a minimal, themeable DaisyUI overlay on top of fullscreen
-video (for example, YouTube).
+Sensor Panel HUD is a Linux hardware telemetry overlay for fullscreen media setups.
+It combines a Go/Fiber backend with a browser HUD that sits on top of YouTube video,
+then lets you tune both media framing and overlay layout from a built-in settings UI.
+
+The project is designed for kiosk-style dashboards (Hyprland, ultrawide, and small
+secondary displays), but it also works as a local observability panel while gaming,
+streaming, or monitoring workloads.
+
+https://github.com/user-attachments/assets/6e66fe1e-e2a5-4c1c-9fa3-11435a825713
+
+---
+
+## What It Does
+
+- Samples live CPU, RAM, and GPU telemetry on a fixed interval.
+- Serves normalized metrics over REST and WebSocket.
+- Renders a live HUD overlay with temperature, utilization, VRAM, and power.
+- Plays YouTube video/playlist content under the overlay.
+- Stores panel customization as versioned settings in SQLite.
+- Applies new settings live (panel auto-reloads when settings are updated).
+
+---
+
+## Hardware + Runtime Notes
 
 Tested on:
 
 - Arch Linux
 - Hyprland (Wayland)
 - AMD Ryzen CPU
-- AMD GPU (amdgpu)
-- lm-sensors
+- AMD GPU (`amdgpu`)
+- `lm-sensors`
 
+Requirements:
 
-https://github.com/user-attachments/assets/6e66fe1e-e2a5-4c1c-9fa3-11435a825713
+- Go 1.25+
+- `lm-sensors`
+- AMD GPU sysfs paths (for GPU busy/VRAM sensors)
 
----------------------------------------------------------------------
+---
 
-FEATURES
+## Quick Start
 
-- CPU temperature (AMD Tctl)
-- GPU temperatures (edge, hotspot, VRAM)
-- GPU VRAM usage (used/total)
-- GPU power draw (watts)
-- Normalized JSON API
-- DaisyUI-based HUD overlay
-- Ultrawide / 8.8-inch display friendly
-- Kiosk-safe (no focus stealing, non-interactive)
-- Metrics are sampled on an interval and served from cached snapshots
+1. Install dependencies:
 
----------------------------------------------------------------------
-
-ARCHITECTURE
-
-lm-sensors + sysfs
-        |
-        v
-Go samplers
-        |
-        v
-Go / Fiber API  (/metrics)
-        |
-        v
-Browser HUD overlay (DaisyUI)
-
-Design rationale:
-
-- Hardware access stays in Go samplers for fewer dependencies
-- Go server returns normalized JSON
-- UI consumes stable, normalized JSON
-- Any layer can be replaced independently
-
----------------------------------------------------------------------
-
-PROJECT LAYOUT
-
-.
-├── cmd/
-│   └── app/
-│       └── main.go
-├── public/
-│   └── index.html
-├── README.md
-└── LICENSE
-
----------------------------------------------------------------------
-
-REQUIREMENTS
-
-System:
-
-- lm-sensors
-- AMD GPU using the amdgpu driver
-- /sys/class/drm available
-
-Go:
-
-- Go 1.25 or newer
-- Air (for hot reload in development)
-
-Environment:
-
-- `DATABASE_URI` is a SQLite file path (default: `data/sensorpanel.db.sqlite3`)
-- `APP_ENV` controls DB log verbosity (`development` enables verbose SQL logs)
-- `APP_PORT` is the Fiber listen port (for example `9070`)
-- `APP_SHUTDOWN_TIMEOUT` controls graceful shutdown wait time (default: `10s`)
-
----------------------------------------------------------------------
-
-SETUP
-
-1) Install dependencies
-
+```bash
 sudo pacman -S lm_sensors
 sudo sensors-detect
-
-Install Air:
-
 go install github.com/air-verse/air@latest
+```
 
-Copy env file:
+2. Create local env file:
 
+```bash
 cp .env.example .env
+```
 
-2) Run the server with hot reload
+3. Run in dev mode (hot reload):
 
-From the project root:
-
+```bash
 make dev
+```
 
-or:
+Or run once:
 
-air
-
-3) Run once without watch mode
-
-From the project root:
-
+```bash
 make run
+```
 
 Database migrations are applied automatically at startup.
 
-The API will be available at:
+---
 
-<http://localhost:9070/metrics>
+## App URLs
 
----------------------------------------------------------------------
+Assuming default `APP_PORT=9070`:
 
-API
+- Main overlay: `http://localhost:9070/`
+- Settings editor: `http://localhost:9070/settings`
+- Telemetry debug page: `http://localhost:9070/telemetry`
+- Metrics JSON: `http://localhost:9070/metrics`
 
-GET /metrics
+---
 
-Example response:
+## Customization You Can Control
 
+All of these are editable in the settings page and persisted as versioned records.
+
+### Media
+
+- Media source kind: `youtube`, `video`, `playlist`
+- YouTube URL or video ID
+- Playlist URL support (`list=` parsing)
+- Video fit: `cover` or `contain`
+- Video alignment (for contain): `left`, `center`, `right`
+- Video offsets:
+  - `video_offset_x_pct` (`-100` to `100`)
+  - `video_offset_y_pct` (`-100` to `100`)
+- Infinite playback loop guard (`infinite_video_playback`)
+
+### Overlay + Visuals
+
+- DaisyUI theme (cool, winter, business, nord, lofi, etc.)
+- Overlay position: `left`, `right`, `center`, `cover`
+- Overlay orientation: `column` or `row`
+- Backdrop on/off (`overlay_disable_backdrop`)
+- Fine-grained overlay padding (`0` to `500` px per side)
+
+### Metrics Placement
+
+- Metrics scale (`metrics_scale_pct`: `50` to `200`)
+- Metrics offset X (`-250` to `250` px)
+- Metrics offset Y (`-250` to `250` px)
+
+### Versioning Behavior
+
+- Each save creates a new settings version.
+- The newest saved version becomes `current`.
+- Version history is visible in the settings page.
+- The running panel receives a settings WebSocket event and reloads.
+
+---
+
+## How To Update Settings
+
+### Option A: Use the UI (recommended)
+
+1. Open `http://localhost:9070/settings`
+2. Adjust media/overlay/metrics controls
+3. Click **Save version**
+4. Panel reloads and applies the new current version
+
+### Option B: Use the API
+
+Create a new version:
+
+```bash
+curl -X POST http://localhost:9070/api/settings \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "config": {
+      "name": "Main Stream Profile",
+      "layout": {
+        "name": "left",
+        "overlay_layout": "column",
+        "theme": "winter",
+        "video_fit": "cover",
+        "video_align": "center",
+        "video_offset_x_pct": 0,
+        "video_offset_y_pct": 0,
+        "infinite_video_playback": true,
+        "metrics_scale_pct": 100,
+        "metrics_offset_x": 0,
+        "metrics_offset_y": 0
+      },
+      "media_sources": [
+        {
+          "kind": "youtube",
+          "url": "https://www.youtube.com/watch?v=AKfsikEXZHM",
+          "label": ""
+        }
+      ]
+    }
+  }'
+```
+
+Get current settings:
+
+```bash
+curl http://localhost:9070/api/settings/current
+```
+
+List recent versions:
+
+```bash
+curl http://localhost:9070/api/settings
+```
+
+---
+
+## Metrics API
+
+### `GET /metrics`
+
+Returns a normalized snapshot:
+
+```json
 {
   "cpu": {
     "temp_c": 38.6,
@@ -150,66 +203,44 @@ Example response:
     "edge_c": 48,
     "hotspot_c": 57,
     "vram_c": 74,
+    "vram_used_gb": 3.2,
+    "vram_total_gb": 16,
+    "vram_used_pct": 20,
     "power_w": 42,
     "util_pct": 18
   }
 }
-
----------------------------------------------------------------------
-
-HUD OVERLAY
-
-- Built with DaisyUI
-- Designed to float over fullscreen video
-- Uses stat, progress, and radial-progress components
-- Fully themeable
-
-Recommended theme for kiosk use:
-
-```html
-
-<html data-theme="winter">
-
 ```
 
----------------------------------------------------------------------
+### WebSockets
 
-GPU UTILIZATION (OPTIONAL)
+- `GET /metrics/ws` streams live sensor snapshots.
+- `GET /settings/ws` emits settings update events.
 
-GPU utilization is not provided by lm-sensors.
+---
 
-On AMD systems it is read from:
+## Environment Variables
 
-/sys/class/drm/card0/device/gpu_busy_percent
+- `DATABASE_URI` SQLite path (default: `data/sensorpanel.db.sqlite3`)
+- `APP_ENV` app mode (`development` enables verbose SQL logs)
+- `APP_PORT` HTTP port (default in example: `9070`)
+- `APP_SHUTDOWN_TIMEOUT` graceful shutdown timeout (default: `10s`)
 
----------------------------------------------------------------------
+---
 
-SECURITY NOTES
+## Security Notes
 
-- Intended for local or localhost use
-- Do not expose publicly without authentication
-- Sensor collection is performed in-process by Go samplers
+- Intended for localhost / trusted LAN use.
+- Do not expose directly to the public internet without auth and transport security.
 
----------------------------------------------------------------------
+---
 
-LICENSE
+## Screenshots
 
-This project is released under the MIT License.
-See the LICENSE file for details.
+Add your latest panel and settings screenshots here.
 
----------------------------------------------------------------------
+---
 
-FUTURE IMPROVEMENTS
+## License
 
-- WebSocket streaming instead of polling
-- EMA smoothing for sensor values
-- CPU power (RAPL) integration
-- Multi-GPU support
-- systemd user service
-- Auto-restart kiosk browser
-
----------------------------------------------------------------------
-
-AUTHOR
-
-Built for a Hyprland-based kiosk and sensor panel workflow.
+MIT. See `LICENSE`.
