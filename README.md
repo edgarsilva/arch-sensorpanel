@@ -8,6 +8,15 @@ The project is designed for kiosk-style dashboards (Hyprland, ultrawide, and sma
 secondary displays), but it also works as a local observability panel while gaming,
 streaming, or monitoring workloads.
 
+It was inspired by the Lian Li Universal Screen and created to accommodate the small
+format displays people mount inside a computer case.
+
+Since those screens do not provide Linux support, I decided to build my own setup
+using free and open source tools plus an inexpensive Lesown 1920x480 display from
+AliExpress. Similar options from brands like Wisecoco, Waveshare, Eyoyo, UPERFECT,
+and other generic HDMI mini displays should also work (for example 5in, 7in, and
+13.3in panels at 1920x480, 800x480, 1024x600, and 1920x1080).
+
 https://github.com/user-attachments/assets/6e66fe1e-e2a5-4c1c-9fa3-11435a825713
 
 ---
@@ -33,11 +42,105 @@ Tested on:
 - AMD GPU (`amdgpu`)
 - `lm-sensors`
 
+Runtime strategy status:
+
+- Currently only an Arch Linux (Hyprland) strategy is implemented.
+- Additional distro/window-manager strategies can be added over time.
+
 Requirements:
 
 - Go 1.25+
 - `lm-sensors`
 - AMD GPU sysfs paths (for GPU busy/VRAM sensors)
+
+---
+
+## Install and Use
+
+1. Clone/download this repository, then install:
+
+```bash
+make install
+```
+
+2. Move the binary to a directory in your `PATH` (example):
+
+```bash
+mv ./bin/sensorpanel ~/.local/bin/
+```
+
+3. Start the server, then open:
+
+- `http://localhost:9070/` to view Sensor Panel
+- `http://localhost:9070/settings` to configure layout/media/metrics
+
+4. In Hyprland, add a keybind that launches Chrome in kiosk/fullscreen mode:
+
+```ini
+bindd = SUPER CTRL, P, Launch SensorPanel, exec, ~/.config/hypr/scripts/launch-sensor-panel.sh
+```
+
+5. Add a window rule so the kiosk window opens on your small monitor workspace.
+
+---
+
+## Hyprland Extras
+
+Example scripts (`~/.config/hypr/scripts`):
+
+`launch-sensor-panel.sh`
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+PANEL_URL="http://homeassistant.local:8123"
+PROFILE_DIR="$HOME/.config/chromium-sensor-panel"
+VIDEO_ID="AKfsikEXZHM"
+
+hyprctl dispatch exec "chromium \
+    --class=chromium-sensor-panel \
+    --user-data-dir=$PROFILE_DIR \
+    --kiosk \
+    --noerrdialogs \
+    --disable-extensions \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-translate \
+    --disable-features=TranslateUI \
+    --disable-sync \
+    \"http://localhost:9070\"
+"
+```
+
+`run-sensor-panel-server.sh`
+
+```bash
+#!/usr/bin/env bash
+~/.local/bin/sensorpanel
+```
+
+Make scripts executable:
+
+```bash
+chmod +x ~/.config/hypr/scripts/launch-sensor-panel.sh
+chmod +x ~/.config/hypr/scripts/run-sensor-panel-server.sh
+```
+
+Hyprland config snippets:
+
+```ini
+bindd = SUPER CTRL, P, Launch SensorPanel, exec, ~/.config/hypr/scripts/launch-sensor-panel.sh
+exec-once = ~/.config/hypr/scripts/run-sensor-panel-server.sh
+
+# Workspace dedicated to the sensor screen
+workspace = 15, monitor:HDMI-A-1
+
+# Move SensorPanel Chromium window to that workspace
+windowrule = match:class ^(chromium-sensor-panel)$, workspace 15 silent
+```
+
+Adjust workspace number and monitor name to match your setup (`hyprctl monitors`).
 
 ---
 
@@ -116,8 +219,8 @@ All of these are editable in the settings page and persisted as versioned record
 ### Metrics Placement
 
 - Metrics scale (`metrics_scale_pct`: `50` to `200`)
-- Metrics offset X (`-250` to `250` px)
-- Metrics offset Y (`-250` to `250` px)
+- Metrics offset X (`-1000` to `1000` px)
+- Metrics offset Y (`-1000` to `1000` px)
 
 ### Versioning Behavior
 
