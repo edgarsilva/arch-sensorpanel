@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.1.1] - 2026-02-27
+
+### Added
+- `make install` target to build and install `sensorpanel` into `~/.local/bin` by default.
+- Configurable install destination via `INSTALL_DIR` (for example `make install INSTALL_DIR=/usr/local/bin`).
+- Requirements note for sensor power-file access (`power` group) with setup command example.
+
+### Changed
+- README installation flow now documents running the installed binary directly.
+- Quick Start renamed to Development Quick Start and clarified for local dev workflows.
+- Hyprland launcher/script docs cleaned up to remove unused variables.
+- Screenshots consolidated into a dedicated section and general wording/style polished.
+
 ## [0.1.0] - 2026-02-27
 
 ### Added

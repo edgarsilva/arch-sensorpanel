@@ -1,5 +1,6 @@
 BIN_DIR := bin
 BINARY := sensorpanel
+INSTALL_DIR ?= $(HOME)/.local/bin
 SHELL := /bin/bash
 
 ifneq ($(wildcard ./.env),)
@@ -11,7 +12,7 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help build dev run air-check
+.PHONY: help build install dev run air-check
 
 ##@ Meta
 help: ## Show this help with available tasks
@@ -23,6 +24,12 @@ help: ## Show this help with available tasks
 build: ## Build binary into bin/
 	@mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/$(BINARY) ./cmd/app
+
+install: build ## Build and copy binary to ~/.local/bin
+	@mkdir -p $(INSTALL_DIR)
+	cp $(BIN_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)
+	@chmod +x $(INSTALL_DIR)/$(BINARY)
+	@echo "Installed $(BINARY) to $(INSTALL_DIR)/$(BINARY)"
 
 ##@ Dev
 air-check: ## Verify Air is installed

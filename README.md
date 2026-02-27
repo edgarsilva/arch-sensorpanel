@@ -12,10 +12,10 @@ It was inspired by the Lian Li Universal Screen and created to accommodate the s
 format displays people mount inside a computer case.
 
 Since those screens do not provide Linux support, I decided to build my own setup
-using free and open source tools plus an inexpensive Lesown 1920x480 display from
+using free and open-source tools plus an inexpensive Lesown 1920x480 display from
 AliExpress. Similar options from brands like Wisecoco, Waveshare, Eyoyo, UPERFECT,
-and other generic HDMI mini displays should also work (for example 5in, 7in, and
-13.3in panels at 1920x480, 800x480, 1024x600, and 1920x1080).
+and other generic HDMI mini displays should also work (for example 5 in, 7 in, and
+13.3 in panels at 1920x480, 800x480, 1024x600, and 1920x1080).
 
 https://github.com/user-attachments/assets/6e66fe1e-e2a5-4c1c-9fa3-11435a825713
 
@@ -52,6 +52,13 @@ Requirements:
 - Go 1.25+
 - `lm-sensors`
 - AMD GPU sysfs paths (for GPU busy/VRAM sensors)
+- User access to sensor power files (add your user to the `power` group if needed)
+
+Example (then log out/in):
+
+```bash
+sudo usermod -aG power "$USER"
+```
 
 ---
 
@@ -63,13 +70,26 @@ Requirements:
 make install
 ```
 
-2. Move the binary to a directory in your `PATH` (example):
+This builds `./bin/sensorpanel` and copies it to `~/.local/bin/sensorpanel`.
+You can override the install path:
 
 ```bash
-mv ./bin/sensorpanel ~/.local/bin/
+make install INSTALL_DIR=/your/path/bin
 ```
 
-3. Start the server, then open:
+2. Start the server:
+
+```bash
+sensorpanel
+```
+
+If `sensorpanel` is not in your PATH yet:
+
+```bash
+~/.local/bin/sensorpanel
+```
+
+3. Open:
 
 - `http://localhost:9070/` to view Sensor Panel
 - `http://localhost:9070/settings` to configure layout/media/metrics
@@ -94,9 +114,7 @@ Example scripts (`~/.config/hypr/scripts`):
 #!/usr/bin/env bash
 set -euo pipefail
 
-PANEL_URL="http://homeassistant.local:8123"
 PROFILE_DIR="$HOME/.config/chromium-sensor-panel"
-VIDEO_ID="AKfsikEXZHM"
 
 hyprctl dispatch exec "chromium \
     --class=chromium-sensor-panel \
@@ -144,9 +162,12 @@ Adjust workspace number and monitor name to match your setup (`hyprctl monitors`
 
 ---
 
-## Quick Start
+## Development Quick Start
 
-1. Install dependencies:
+1. Install dependencies for local development:
+
+Most distros (Ubuntu, Omarchy, Fedora, Pop!_OS, etc.) already ship with
+`lm-sensors`. Run `sensors` first to confirm it is available before installing.
 
 ```bash
 sudo pacman -S lm_sensors
@@ -181,15 +202,13 @@ Database migrations are applied automatically at startup.
 Assuming default `APP_PORT=9070`:
 
 - Main overlay: `http://localhost:9070/`
-  <img width="1890" height="541" alt="screenshot-2026-02-26_19-14-06" src="https://github.com/user-attachments/assets/d2d2304d-e4c0-4cac-befe-e2146b2d78e8" />
 
 - Settings editor: `http://localhost:9070/settings`
-  <img width="1664" height="2064" alt="screenshot-2026-02-26_19-08-33" src="https://github.com/user-attachments/assets/25080ddb-f36a-465e-a349-b0ed19b1806f" />
 
 - Telemetry debug page: `http://localhost:9070/telemetry`
-  <img width="1721" height="1748" alt="screenshot-2026-02-26_19-10-27" src="https://github.com/user-attachments/assets/1ddff268-cdee-4b48-a4c0-2a3c6f76090c" />
 
 - Metrics JSON: `http://localhost:9070/metrics`
+
 ---
 
 ## Customization You Can Control
@@ -239,10 +258,6 @@ All of these are editable in the settings page and persisted as versioned record
 2. Adjust media/overlay/metrics controls
 3. Click **Save version**
 4. Panel reloads and applies the new current version
- 
-<img width="1664" height="2064" alt="screenshot-2026-02-26_19-08-33" src="https://github.com/user-attachments/assets/d8eea306-9c1c-4c99-bad0-beca60f52970" />
-
-<img width="1416" height="1421" alt="screenshot-2026-02-26_19-08-47" src="https://github.com/user-attachments/assets/21029a06-2e93-414a-9b16-31f6891175ea" />
 
 
 ### Option B: Use the API
@@ -350,7 +365,23 @@ Returns a normalized snapshot:
 
 ## Screenshots
 
-Add your latest panel and settings screenshots here.
+Main overlay:
+
+<img width="1890" height="541" alt="Sensor Panel main overlay" src="https://github.com/user-attachments/assets/d2d2304d-e4c0-4cac-befe-e2146b2d78e8" />
+
+Settings editor:
+
+<img width="1664" height="2064" alt="Sensor Panel settings editor" src="https://github.com/user-attachments/assets/25080ddb-f36a-465e-a349-b0ed19b1806f" />
+
+Telemetry page:
+
+<img width="1721" height="1748" alt="Sensor Panel telemetry page" src="https://github.com/user-attachments/assets/1ddff268-cdee-4b48-a4c0-2a3c6f76090c" />
+
+Settings tuning examples:
+
+<img width="1664" height="2064" alt="Settings tuning example A" src="https://github.com/user-attachments/assets/d8eea306-9c1c-4c99-bad0-beca60f52970" />
+
+<img width="1416" height="1421" alt="Settings tuning example B" src="https://github.com/user-attachments/assets/21029a06-2e93-414a-9b16-31f6891175ea" />
 
 ---
 
