@@ -13,6 +13,8 @@ Tested on:
 - AMD GPU (amdgpu)
 - lm-sensors
 
+https://github.com/user-attachments/assets/910858a3-6697-4b66-b7dd-da601de5418a
+
 ---------------------------------------------------------------------
 
 FEATURES
