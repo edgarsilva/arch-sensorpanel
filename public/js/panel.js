@@ -215,8 +215,8 @@ function applyMetricsTuning(layoutConfig) {
   if (!slot) return
 
   const scalePct = clamp(Number(layoutConfig && layoutConfig.metrics_scale_pct) || 100, 50, 200)
-  const offsetX = clamp(Number(layoutConfig && layoutConfig.metrics_offset_x) || 0, -250, 250)
-  const offsetY = clamp(Number(layoutConfig && layoutConfig.metrics_offset_y) || 0, -250, 250)
+  const offsetX = clamp(Number(layoutConfig && layoutConfig.metrics_offset_x) || 0, -1000, 1000)
+  const offsetY = clamp(Number(layoutConfig && layoutConfig.metrics_offset_y) || 0, -1000, 1000)
 
   slot.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scalePct / 100})`
   slot.style.transformOrigin = "center"

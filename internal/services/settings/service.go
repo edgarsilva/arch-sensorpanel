@@ -243,12 +243,12 @@ func validateConfig(config models.SettingsConfig) error {
 		return fmt.Errorf("%w: metrics_scale_pct must be between 50 and 200", ErrInvalidConfig)
 	}
 
-	if config.Layout.MetricsOffsetX < -250 || config.Layout.MetricsOffsetX > 250 {
-		return fmt.Errorf("%w: metrics_offset_x must be between -250 and 250", ErrInvalidConfig)
+	if config.Layout.MetricsOffsetX < -1000 || config.Layout.MetricsOffsetX > 1000 {
+		return fmt.Errorf("%w: metrics_offset_x must be between -1000 and 1000", ErrInvalidConfig)
 	}
 
-	if config.Layout.MetricsOffsetY < -250 || config.Layout.MetricsOffsetY > 250 {
-		return fmt.Errorf("%w: metrics_offset_y must be between -250 and 250", ErrInvalidConfig)
+	if config.Layout.MetricsOffsetY < -1000 || config.Layout.MetricsOffsetY > 1000 {
+		return fmt.Errorf("%w: metrics_offset_y must be between -1000 and 1000", ErrInvalidConfig)
 	}
 
 	for i, source := range config.MediaSources {

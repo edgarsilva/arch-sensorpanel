@@ -189,20 +189,20 @@
 
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Metrics scale (%)</legend>
-                <input id="metrics_scale_pct" type="number" min="50" max="200" step="1" class="input input-bordered w-full" value="100" />
-                <label class="label">Range: 50 to 200</label>
+                <input id="metrics_scale_pct" type="range" min="50" max="200" step="1" class="range" value="100" />
+                <label class="label">Range: 50% to 200% <span id="metrics_scale_pct_value" class="badge badge-ghost badge-sm">100%</span></label>
               </fieldset>
 
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Horizontal offset (px)</legend>
-                <input id="metrics_offset_x" type="number" min="-250" max="250" step="1" class="input input-bordered w-full" value="0" />
-                <label class="label">Range: -250px to 250px</label>
+                <input id="metrics_offset_x" type="range" min="-1000" max="1000" step="1" class="range" value="0" />
+                <label class="label">Range: -1000px to 1000px <span id="metrics_offset_x_value" class="badge badge-ghost badge-sm">0px</span></label>
               </fieldset>
 
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Vertical offset (px)</legend>
-                <input id="metrics_offset_y" type="number" min="-250" max="250" step="1" class="input input-bordered w-full" value="0" />
-                <label class="label">Range: -250px to 250px</label>
+                <input id="metrics_offset_y" type="range" min="-1000" max="1000" step="1" class="range" value="0" />
+                <label class="label">Range: -1000px to 1000px <span id="metrics_offset_y_value" class="badge badge-ghost badge-sm">0px</span></label>
               </fieldset>
 
               <div class="flex items-center gap-3">
@@ -233,6 +233,9 @@
       const sliderValueBindings = [
         ["video_offset_x_pct", "video_offset_x_pct_value", "%"],
         ["video_offset_y_pct", "video_offset_y_pct_value", "%"],
+        ["metrics_scale_pct", "metrics_scale_pct_value", "%"],
+        ["metrics_offset_x", "metrics_offset_x_value", "px"],
+        ["metrics_offset_y", "metrics_offset_y_value", "px"],
         ["overlay_padding_top", "overlay_padding_top_value", "px"],
         ["overlay_padding_right", "overlay_padding_right_value", "px"],
         ["overlay_padding_bottom", "overlay_padding_bottom_value", "px"],
