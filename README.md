@@ -14,8 +14,7 @@ Tested on:
 - lm-sensors
 
 
-https://github.com/user-attachments/assets/a2f20e20-23d4-4b7e-8694-1567e8a5e148
-
+https://github.com/user-attachments/assets/6e66fe1e-e2a5-4c1c-9fa3-11435a825713
 
 ---------------------------------------------------------------------
 
