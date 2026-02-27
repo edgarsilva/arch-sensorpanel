@@ -19,6 +19,10 @@
       <div class="grid gap-6 md:grid-cols-[1.2fr_1fr]">
         <section class="card bg-base-100 shadow-sm">
           <div class="card-body">
+            <div class="flex items-center justify-between gap-3">
+              <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/70">Settings</h2>
+              <span id="settings_context_badge" class="badge badge-ghost badge-sm">New draft</span>
+            </div>
             <form id="settings_form" class="space-y-4" method="post">
               <fieldset class="fieldset w-full">
                 <legend class="fieldset-legend">Name</legend>
@@ -322,7 +326,9 @@
 
         for (const item of items) {
           const row = document.createElement("li")
-          row.className = "list-row flex flex-nowrap items-start gap-3"
+          row.className = item.is_current
+            ? "list-row rounded-none flex flex-nowrap items-start gap-3 bg-success/10"
+            : "list-row rounded-none flex flex-nowrap items-start gap-3"
           const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm whitespace-nowrap">current</span>' : '<span class="badge badge-ghost badge-sm whitespace-nowrap">history</span>'
           const configName = (item.config?.name || "Untitled").trim()
           row.innerHTML = `<div class="min-w-0 flex-1"><div class="font-semibold leading-snug break-words [overflow-wrap:anywhere]">${configName}</div><div class="text-xs uppercase font-semibold opacity-60">v${item.version}</div></div><div class="shrink-0 flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">${currentBadge}<a class="btn btn-xs btn-ghost whitespace-nowrap" href="/settings/${item.id}/edit">edit</a></div>`
@@ -330,11 +336,15 @@
         }
       }
 
-      async function loadEdit() {
-        if (!idFromPath) return
-        const res = await fetch(`/api/settings/${idFromPath}`)
-        if (!res.ok) return
-        const item = await res.json()
+      function setSettingsContextBadge(text, tone) {
+        const badge = document.getElementById("settings_context_badge")
+        if (!badge) return
+        badge.className = `badge badge-sm ${tone}`
+        badge.textContent = text
+      }
+
+      function applySettingsToForm(item) {
+        if (!item) return
         document.getElementById("config_name").value = item.config?.name || ""
         document.getElementById("layout_name").value = item.config?.layout?.name || "left"
         document.getElementById("overlay_layout").value = item.config?.layout?.overlay_layout || "column"
@@ -358,6 +368,27 @@
           document.getElementById("media_kind").value = firstMedia.kind || "youtube"
           document.getElementById("media_url").value = firstMedia.url || ""
         }
+      }
+
+      async function loadEdit() {
+        if (idFromPath) {
+          const res = await fetch(`/api/settings/${idFromPath}`)
+          if (!res.ok) return
+          const item = await res.json()
+          applySettingsToForm(item)
+          setSettingsContextBadge(item.is_current ? "Current settings" : `Editing v${item.version}`, item.is_current ? "badge-success" : "badge-ghost")
+          return
+        }
+
+        const res = await fetch("/api/settings/current")
+        if (res.status === 404) {
+          setSettingsContextBadge("New draft", "badge-ghost")
+          return
+        }
+        if (!res.ok) return
+        const item = await res.json()
+        applySettingsToForm(item)
+        setSettingsContextBadge("Current settings", "badge-success")
       }
 
       resetVideoOffsetBtn.addEventListener("click", () => {
