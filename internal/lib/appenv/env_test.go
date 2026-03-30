@@ -9,7 +9,7 @@ import (
 )
 
 func loadForTest() (*Env, error) {
-	env := &Env{AppShutdownTimeout: 10 * time.Second}
+	env := &Env{AppShutdownTimeout: 1 * time.Second}
 	if err := simpleenv.Load(env); err != nil {
 		return nil, err
 	}
@@ -75,8 +75,8 @@ func TestLoadDefaultsShutdownTimeout(t *testing.T) {
 		t.Fatalf("loadForTest returned error: %v", err)
 	}
 
-	if env.AppShutdownTimeout != 10*time.Second {
-		t.Fatalf("expected default AppShutdownTimeout 10s, got %s", env.AppShutdownTimeout)
+	if env.AppShutdownTimeout != 1*time.Second {
+		t.Fatalf("expected default AppShutdownTimeout 1s, got %s", env.AppShutdownTimeout)
 	}
 }
 

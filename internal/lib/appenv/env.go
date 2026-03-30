@@ -21,7 +21,7 @@ func New() *Env {
 		Environment:        "development",
 		AppPort:            9070,
 		DatabaseURI:        "~/.config/sensorpanel.db.sqlite3",
-		AppShutdownTimeout: 10 * time.Second,
+		AppShutdownTimeout: 1 * time.Second,
 	}
 	err := simpleenv.Load(env)
 	if err != nil {

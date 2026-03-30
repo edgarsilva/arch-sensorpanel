@@ -210,8 +210,9 @@
               </fieldset>
 
               <div class="flex items-center gap-3">
-                <button type="submit" class="btn btn-primary">Save version</button>
-                <a href="/settings/new" class="btn btn-ghost">New</a>
+                <button id="save_current_btn" type="button" class="btn btn-accent">Save Current</button>
+                <button id="save_new_version_btn" type="submit" class="btn btn-primary">Save as New Version</button>
+                <a href="/settings/new" class="btn btn-ghost">New Draft</a>
                 <span id="form_status" class="text-sm text-base-content/70"></span>
               </div>
             </form>
@@ -231,8 +232,13 @@
       const listEl = document.getElementById("settings_list")
       const form = document.getElementById("settings_form")
       const statusEl = document.getElementById("form_status")
+      const saveCurrentBtn = document.getElementById("save_current_btn")
       const resetVideoOffsetBtn = document.getElementById("reset_video_offset_btn")
       const resetOverlayPaddingBtn = document.getElementById("reset_overlay_padding_btn")
+      let autosaveEnabled = true
+      const autosaveTimers = new Map()
+
+      const FIELD_AUTOSAVE_DELAY_MS = 450
 
       const sliderValueBindings = [
         ["video_offset_x_pct", "video_offset_x_pct_value", "%"],
@@ -309,6 +315,105 @@
         }
       }
 
+      function setStatus(text) {
+        statusEl.textContent = text
+      }
+
+      async function saveCurrentConfig() {
+        setStatus("saving current...")
+        const res = await fetch("/api/settings/current", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(toPayload()),
+        })
+
+        if (!res.ok) {
+          let message = "failed to save current"
+          try {
+            const payload = await res.json()
+            if (payload && payload.message) message = payload.message
+          } catch (_) {
+          }
+          throw new Error(message)
+        }
+
+        setStatus("current saved")
+      }
+
+      async function saveCurrentField(field, value) {
+        if (!autosaveEnabled) return
+        if (field === "media_url" && String(value || "").trim() === "") {
+          setStatus("media url cannot be empty")
+          return
+        }
+
+        const res = await fetch("/api/settings/current/field", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ field, value }),
+        })
+
+        if (!res.ok) {
+          let message = "autosave failed"
+          try {
+            const payload = await res.json()
+            if (payload && payload.message) message = payload.message
+          } catch (_) {
+          }
+          throw new Error(message)
+        }
+      }
+
+      function queueFieldAutosave(field, value) {
+        if (!autosaveEnabled) return
+        const existing = autosaveTimers.get(field)
+        if (existing) {
+          clearTimeout(existing)
+        }
+
+        setStatus("autosaving...")
+        const timer = setTimeout(async () => {
+          autosaveTimers.delete(field)
+          try {
+            await saveCurrentField(field, value)
+            setStatus("autosaved")
+          } catch (err) {
+            setStatus(err.message || "autosave failed")
+          }
+        }, FIELD_AUTOSAVE_DELAY_MS)
+        autosaveTimers.set(field, timer)
+      }
+
+      function bindAutosaveField(inputId, field, valueResolver, eventName = "input") {
+        const input = document.getElementById(inputId)
+        if (!input) return
+        input.addEventListener(eventName, () => {
+          queueFieldAutosave(field, valueResolver(input))
+        })
+      }
+
+      function bindAutosave() {
+        bindAutosaveField("config_name", "config_name", (input) => input.value.trim(), "input")
+        bindAutosaveField("layout_name", "layout_name", (input) => input.value, "change")
+        bindAutosaveField("overlay_layout", "overlay_layout", (input) => input.value, "change")
+        bindAutosaveField("theme", "theme", (input) => input.value, "change")
+        bindAutosaveField("video_fit", "video_fit", (input) => input.value, "change")
+        bindAutosaveField("video_align", "video_align", (input) => input.value, "change")
+        bindAutosaveField("video_offset_x_pct", "video_offset_x_pct", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("video_offset_y_pct", "video_offset_y_pct", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("infinite_video_playback", "infinite_video_playback", (input) => !!input.checked, "change")
+        bindAutosaveField("overlay_backdrop", "overlay_backdrop", (input) => !!input.checked, "change")
+        bindAutosaveField("overlay_padding_top", "overlay_padding_top", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("overlay_padding_right", "overlay_padding_right", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("overlay_padding_bottom", "overlay_padding_bottom", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("overlay_padding_left", "overlay_padding_left", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("metrics_scale_pct", "metrics_scale_pct", (input) => Number(input.value || 100), "input")
+        bindAutosaveField("metrics_offset_x", "metrics_offset_x", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("metrics_offset_y", "metrics_offset_y", (input) => Number(input.value || 0), "input")
+        bindAutosaveField("media_kind", "media_kind", (input) => input.value, "change")
+        bindAutosaveField("media_url", "media_url", (input) => input.value.trim(), "input")
+      }
+
       async function loadList() {
         const res = await fetch("/api/settings")
         const data = await res.json()
@@ -376,18 +481,25 @@
           if (!res.ok) return
           const item = await res.json()
           applySettingsToForm(item)
+          autosaveEnabled = !!item.is_current
           setSettingsContextBadge(item.is_current ? "Current settings" : `Editing v${item.version}`, item.is_current ? "badge-success" : "badge-ghost")
+          if (!item.is_current) {
+            setStatus("autosave disabled on history versions")
+          }
           return
         }
 
         const res = await fetch("/api/settings/current")
         if (res.status === 404) {
+          autosaveEnabled = false
           setSettingsContextBadge("New draft", "badge-ghost")
+          setStatus("create a version first to enable autosave")
           return
         }
         if (!res.ok) return
         const item = await res.json()
         applySettingsToForm(item)
+        autosaveEnabled = true
         setSettingsContextBadge("Current settings", "badge-success")
       }
 
@@ -395,6 +507,8 @@
         document.getElementById("video_offset_x_pct").value = 0
         document.getElementById("video_offset_y_pct").value = 0
         syncTuningValueLabels()
+        queueFieldAutosave("video_offset_x_pct", 0)
+        queueFieldAutosave("video_offset_y_pct", 0)
       })
 
       resetOverlayPaddingBtn.addEventListener("click", () => {
@@ -403,11 +517,23 @@
         document.getElementById("overlay_padding_bottom").value = 0
         document.getElementById("overlay_padding_left").value = 0
         syncTuningValueLabels()
+        queueFieldAutosave("overlay_padding_top", 0)
+        queueFieldAutosave("overlay_padding_right", 0)
+        queueFieldAutosave("overlay_padding_bottom", 0)
+        queueFieldAutosave("overlay_padding_left", 0)
+      })
+
+      saveCurrentBtn.addEventListener("click", async () => {
+        try {
+          await saveCurrentConfig()
+        } catch (err) {
+          setStatus(err.message || "failed to save current")
+        }
       })
 
       form.addEventListener("submit", (e) => {
         e.preventDefault()
-        statusEl.textContent = "saving..."
+        setStatus("saving new version...")
 
         const payload = toPayload()
         const cfg = payload.config
@@ -454,10 +580,11 @@
       })
 
       Promise.all([loadList(), loadEdit()]).catch(() => {
-        statusEl.textContent = "failed to load settings"
+        setStatus("failed to load settings")
       })
 
       syncTuningValueLabels()
+      bindAutosave()
     </script>
   </body>
 </html>

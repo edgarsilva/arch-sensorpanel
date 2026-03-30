@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"strconv"
 	"strings"
@@ -34,6 +35,11 @@ type createSettingsInput struct {
 	MediaKind              string                `form:"media_kind"`
 	MediaURL               string                `form:"media_url"`
 	MediaLabel             string                `form:"media_label"`
+}
+
+type patchCurrentFieldInput struct {
+	Field string `json:"field"`
+	Value any    `json:"value"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -215,6 +221,91 @@ func (s *Service) Put(c fiber.Ctx) error {
 	return s.Patch(c)
 }
 
+func (s *Service) PutCurrent(c fiber.Ctx) error {
+	in, err := parseUpdateInput(c)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	updated, err := s.UpdateCurrent(c.Context(), in.Config)
+	if err != nil {
+		if errors.Is(err, ErrSettingsNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, ErrInvalidConfig) {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	cfg, err := s.DecodeConfig(updated)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if s.Server != nil && s.Server.WSHub != nil {
+		s.Server.WSHub.BroadcastSettingsUpdated(updated.Version)
+	}
+
+	return c.JSON(fiber.Map{
+		"id":         updated.ID,
+		"version":    updated.Version,
+		"is_current": updated.IsCurrent,
+		"config":     cfg,
+	})
+}
+
+func (s *Service) PatchCurrentField(c fiber.Ctx) error {
+	var in patchCurrentFieldInput
+	if err := c.Bind().JSON(&in); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	row, err := s.GetCurrentRow(c.Context())
+	if err != nil {
+		if errors.Is(err, ErrSettingsNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	cfg, err := s.DecodeConfig(row)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if err := applyFieldPatch(&cfg, strings.TrimSpace(in.Field), in.Value); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+
+	updated, err := s.UpdateCurrent(c.Context(), cfg)
+	if err != nil {
+		if errors.Is(err, ErrSettingsNotFound) {
+			return fiber.NewError(fiber.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, ErrInvalidConfig) {
+			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	updatedCfg, err := s.DecodeConfig(updated)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	if s.Server != nil && s.Server.WSHub != nil {
+		s.Server.WSHub.BroadcastSettingsUpdated(updated.Version)
+	}
+
+	return c.JSON(fiber.Map{
+		"id":         updated.ID,
+		"version":    updated.Version,
+		"is_current": updated.IsCurrent,
+		"config":     updatedCfg,
+	})
+}
+
 func (s *Service) Delete(c fiber.Ctx) error {
 	id, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
@@ -344,4 +435,138 @@ func parseIntOrZero(raw string) int {
 func parseBoolForm(raw string) bool {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	return value == "true" || value == "1" || value == "on" || value == "yes"
+}
+
+func applyFieldPatch(cfg *models.SettingsConfig, field string, value any) error {
+	if cfg == nil {
+		return fmt.Errorf("invalid config")
+	}
+
+	if len(cfg.MediaSources) == 0 {
+		cfg.MediaSources = []models.SettingsMediaSource{{}}
+	}
+
+	switch field {
+	case "config_name":
+		cfg.Name = strings.TrimSpace(toString(value))
+	case "layout_name":
+		cfg.Layout.Name = strings.TrimSpace(toString(value))
+	case "overlay_layout":
+		cfg.Layout.OverlayLayout = strings.TrimSpace(toString(value))
+	case "theme":
+		cfg.Layout.Theme = strings.TrimSpace(toString(value))
+	case "video_fit":
+		cfg.Layout.VideoFit = strings.TrimSpace(toString(value))
+	case "video_align":
+		cfg.Layout.VideoAlign = strings.TrimSpace(toString(value))
+	case "video_offset_x_pct":
+		cfg.Layout.VideoOffsetXPct = toInt(value)
+	case "video_offset_y_pct":
+		cfg.Layout.VideoOffsetYPct = toInt(value)
+	case "infinite_video_playback":
+		cfg.Layout.InfiniteVideoPlayback = toBool(value)
+	case "overlay_backdrop":
+		cfg.Layout.OverlayDisableBackdrop = !toBool(value)
+	case "overlay_padding_top":
+		cfg.Layout.OverlayPaddingTop = toInt(value)
+	case "overlay_padding_right":
+		cfg.Layout.OverlayPaddingRight = toInt(value)
+	case "overlay_padding_bottom":
+		cfg.Layout.OverlayPaddingBottom = toInt(value)
+	case "overlay_padding_left":
+		cfg.Layout.OverlayPaddingLeft = toInt(value)
+	case "metrics_scale_pct":
+		cfg.Layout.MetricsScale = toInt(value)
+	case "metrics_offset_x":
+		cfg.Layout.MetricsOffsetX = toInt(value)
+	case "metrics_offset_y":
+		cfg.Layout.MetricsOffsetY = toInt(value)
+	case "media_kind":
+		cfg.MediaSources[0].Kind = strings.TrimSpace(toString(value))
+	case "media_url":
+		cfg.MediaSources[0].URL = strings.TrimSpace(toString(value))
+	default:
+		return fmt.Errorf("unsupported field %q", field)
+	}
+
+	return nil
+}
+
+func toString(value any) string {
+	if value == nil {
+		return ""
+	}
+	if str, ok := value.(string); ok {
+		return str
+	}
+	return fmt.Sprintf("%v", value)
+}
+
+func toInt(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int8:
+		return int(v)
+	case int16:
+		return int(v)
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case uint:
+		return int(v)
+	case uint8:
+		return int(v)
+	case uint16:
+		return int(v)
+	case uint32:
+		return int(v)
+	case uint64:
+		return int(v)
+	case float32:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(v))
+		return n
+	default:
+		return 0
+	}
+}
+
+func toBool(value any) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return parseBoolForm(v)
+	case float64:
+		return v != 0
+	case float32:
+		return v != 0
+	case int:
+		return v != 0
+	case int8:
+		return v != 0
+	case int16:
+		return v != 0
+	case int32:
+		return v != 0
+	case int64:
+		return v != 0
+	case uint:
+		return v != 0
+	case uint8:
+		return v != 0
+	case uint16:
+		return v != 0
+	case uint32:
+		return v != 0
+	case uint64:
+		return v != 0
+	default:
+		return false
+	}
 }

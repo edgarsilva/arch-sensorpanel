@@ -74,6 +74,44 @@ func (s *Service) CreateVersionFromID(ctx context.Context, id uint, config model
 	return s.createVersion(ctx, config)
 }
 
+func (s *Service) UpdateCurrent(ctx context.Context, config models.SettingsConfig) (*models.Settings, error) {
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+
+	row, err := s.GetCurrentRow(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return nil, db.WrapWithOp("marshal settings config", err)
+	}
+
+	now := time.Now().UTC()
+	result := s.DB.WithContext(ctx).
+		Model(&models.Settings{}).
+		Where("id = ? AND is_current = ?", row.ID, true).
+		Updates(map[string]any{
+			"config_json": string(configJSON),
+			"updated_at":  now,
+		})
+	if result.Error != nil {
+		return nil, db.WrapWithOp("update current settings", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, ErrSettingsNotFound
+	}
+
+	updated, err := s.GetByID(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return updated, nil
+}
+
 func (s *Service) DeleteByID(ctx context.Context, id uint) error {
 	row, err := s.GetByID(ctx, id)
 	if err != nil {

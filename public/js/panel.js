@@ -7,6 +7,7 @@ const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
 const SETTINGS_RELOAD_DELAY_MS = 350
+const PLAYLIST_PROGRESS_SAVE_DELAY_MS = 500
 
 let bootConfig = {
   layout: {
@@ -31,6 +32,10 @@ let bootConfig = {
 }
 let bootSettingsVersion = 0
 let settingsReloadScheduled = false
+let playlistProgressSaveTimer = null
+let playlistProgressSaveInFlight = false
+let queuedPlaylistMediaURL = ""
+let lastPersistedPlaylistMediaURL = ""
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
@@ -322,6 +327,74 @@ function resolveVideoId() {
   return mediaMode.videoId || DEFAULT_VIDEO_ID
 }
 
+function currentMediaURLFromConfig() {
+  const first = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources[0] : null
+  return String((first && first.url) || "").trim()
+}
+
+function buildPlaylistMediaURL(videoId, playlistId) {
+  const v = String(videoId || "").trim()
+  const list = String(playlistId || "").trim()
+  if (!v || !list) return ""
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(v)}&list=${encodeURIComponent(list)}`
+}
+
+async function flushPlaylistProgressSave() {
+  if (playlistProgressSaveInFlight) return
+
+  const nextURL = queuedPlaylistMediaURL
+  if (!nextURL) return
+  if (nextURL === currentMediaURLFromConfig() || nextURL === lastPersistedPlaylistMediaURL) {
+    queuedPlaylistMediaURL = ""
+    return
+  }
+
+  queuedPlaylistMediaURL = ""
+  playlistProgressSaveInFlight = true
+
+  try {
+    const res = await fetch("/api/settings/current/field", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ field: "media_url", value: nextURL }),
+    })
+    if (!res.ok) {
+      throw new Error(`playlist progress save failed: ${res.status}`)
+    }
+    lastPersistedPlaylistMediaURL = nextURL
+  } catch (err) {
+    console.warn("failed to persist current playlist video", err)
+  } finally {
+    playlistProgressSaveInFlight = false
+    if (queuedPlaylistMediaURL && queuedPlaylistMediaURL !== lastPersistedPlaylistMediaURL) {
+      setTimeout(flushPlaylistProgressSave, 0)
+    }
+  }
+}
+
+function queuePlaylistProgressSave() {
+  if (!player || mediaMode.kind !== "playlist" || !mediaMode.playlistId) return
+  if (typeof player.getVideoData !== "function") return
+
+  const videoData = player.getVideoData() || {}
+  const currentVideoId = String(videoData.video_id || "").trim()
+  if (!currentVideoId) return
+
+  const nextURL = buildPlaylistMediaURL(currentVideoId, mediaMode.playlistId)
+  if (!nextURL) return
+  if (nextURL === currentMediaURLFromConfig() || nextURL === lastPersistedPlaylistMediaURL) return
+
+  queuedPlaylistMediaURL = nextURL
+  if (playlistProgressSaveTimer) {
+    clearTimeout(playlistProgressSaveTimer)
+  }
+
+  playlistProgressSaveTimer = setTimeout(() => {
+    playlistProgressSaveTimer = null
+    flushPlaylistProgressSave()
+  }, PLAYLIST_PROGRESS_SAVE_DELAY_MS)
+}
+
 function isInfiniteVideoPlaybackEnabled() {
   return !!(bootConfig.layout && bootConfig.layout.infinite_video_playback)
 }
@@ -357,7 +430,7 @@ function connectSettingsSocket() {
       if (!payload || payload.type !== "settings.updated") return
 
       const incomingVersion = Number(payload.version) || 0
-      if (incomingVersion === 0 || incomingVersion > bootSettingsVersion) {
+      if (incomingVersion === 0 || incomingVersion >= bootSettingsVersion) {
         scheduleSettingsReload()
       }
     } catch (_) {
@@ -410,6 +483,8 @@ function onPlayerReady(e) {
 
 function onPlayerStateChange(e) {
   if (e.data === YT.PlayerState.PLAYING) {
+    queuePlaylistProgressSave()
+
     if (isInfiniteVideoPlaybackEnabled()) {
       startLoopGuard()
     } else {
@@ -561,6 +636,7 @@ window.addEventListener("resize", () => {
 
 bootstrapSettings().finally(() => {
   mediaMode = resolveMediaMode()
+  lastPersistedPlaylistMediaURL = currentMediaURLFromConfig()
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
   applyVideoOffset(bootConfig.layout)

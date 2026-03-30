@@ -65,6 +65,8 @@ func SettingsRoutes(s *server.Server) {
 
 	s.Get("/api/settings", settingsHandler.Index)
 	s.Get("/api/settings/current", settingsHandler.GetCurrent)
+	s.Put("/api/settings/current", settingsHandler.PutCurrent)
+	s.Patch("/api/settings/current/field", settingsHandler.PatchCurrentField)
 	s.Get("/api/settings/:id", settingsHandler.Get)
 	s.Post("/api/settings", settingsHandler.Create)
 	s.Put("/api/settings/:id", settingsHandler.Put)
