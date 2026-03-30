@@ -28,8 +28,8 @@ func TestLoadSuccess(t *testing.T) {
 		t.Fatalf("loadForTest returned error: %v", err)
 	}
 
-	if env.AppEnv != "development" {
-		t.Fatalf("expected AppEnv development, got %q", env.AppEnv)
+	if env.Environment != "development" {
+		t.Fatalf("expected AppEnv development, got %q", env.Environment)
 	}
 	if env.AppPort != 9070 {
 		t.Fatalf("expected AppPort 9070, got %d", env.AppPort)
@@ -42,14 +42,25 @@ func TestLoadSuccess(t *testing.T) {
 	}
 }
 
-func TestLoadMissingRequiredEnv(t *testing.T) {
+func TestLoadMissingOptionalEnv(t *testing.T) {
 	os.Unsetenv("APP_ENV")
 	os.Unsetenv("APP_PORT")
 	os.Unsetenv("DATABASE_URI")
 	os.Unsetenv("APP_SHUTDOWN_TIMEOUT")
 
-	if _, err := loadForTest(); err == nil {
-		t.Fatal("expected loadForTest to fail when required env vars are missing")
+	env, err := loadForTest()
+	if err != nil {
+		t.Fatalf("expected loadForTest to succeed when optional env vars are missing: %v", err)
+	}
+
+	if env.Environment != "" {
+		t.Fatalf("expected default Environment to remain empty, got %q", env.Environment)
+	}
+	if env.AppPort != 0 {
+		t.Fatalf("expected default AppPort to remain 0, got %d", env.AppPort)
+	}
+	if env.DatabaseURI != "" {
+		t.Fatalf("expected default DatabaseURI to remain empty, got %q", env.DatabaseURI)
 	}
 }
 

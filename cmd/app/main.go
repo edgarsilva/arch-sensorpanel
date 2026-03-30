@@ -18,6 +18,7 @@ import (
 	"sensorpanel/internal/lib/wshub"
 	"sensorpanel/internal/routes"
 	"sensorpanel/internal/server"
+	publicfs "sensorpanel/public"
 )
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
 	fmt.Println("🗄️   Opening Database...")
 	database, err := db.New(db.Config{
 		DatabaseURI: env.DatabaseURI,
-		Environment: env.AppEnv,
+		Environment: env.Environment,
 	})
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
@@ -56,7 +57,7 @@ func main() {
 	s, err := server.New(
 		server.WithAppEnv(env),
 		server.WithDatabase(database),
-		server.WithPublicFS(os.DirFS("public")),
+		server.WithPublicFS(publicfs.FS),
 		server.WithWSHub(wshub.New()),
 	)
 	if err != nil {

@@ -3,7 +3,7 @@ module sensorpanel
 go 1.25.1
 
 require (
-	github.com/edgarsilva/simpleenv v1.1.2
+	github.com/edgarsilva/simpleenv v1.3.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/gofiber/contrib/v3/websocket v1.0.0
 	github.com/gofiber/fiber/v3 v3.0.0
