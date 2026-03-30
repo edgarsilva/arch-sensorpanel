@@ -7,7 +7,6 @@ const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
 const SETTINGS_RELOAD_DELAY_MS = 350
-const PLAYLIST_PROGRESS_SAVE_DELAY_MS = 500
 
 let bootConfig = {
   layout: {
@@ -32,10 +31,7 @@ let bootConfig = {
 }
 let bootSettingsVersion = 0
 let settingsReloadScheduled = false
-let playlistProgressSaveTimer = null
-let playlistProgressSaveInFlight = false
-let queuedPlaylistMediaURL = ""
-let lastPersistedPlaylistMediaURL = ""
+let lastObservedPlaylistVideoId = ""
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max)
@@ -339,60 +335,58 @@ function buildPlaylistMediaURL(videoId, playlistId) {
   return `https://www.youtube.com/watch?v=${encodeURIComponent(v)}&list=${encodeURIComponent(list)}`
 }
 
-async function flushPlaylistProgressSave() {
-  if (playlistProgressSaveInFlight) return
+function videoIdFromURL(rawURL) {
+  if (!rawURL) return ""
+  try {
+    const url = new URL(rawURL)
+    return String(url.searchParams.get("v") || "").trim()
+  } catch (_) {
+    return ""
+  }
+}
 
-  const nextURL = queuedPlaylistMediaURL
-  if (!nextURL) return
-  if (nextURL === currentMediaURLFromConfig() || nextURL === lastPersistedPlaylistMediaURL) {
-    queuedPlaylistMediaURL = ""
-    return
+function getCurrentPlayerVideoId() {
+  if (!player) return ""
+
+  if (typeof player.getVideoData === "function") {
+    const videoData = player.getVideoData() || {}
+    const fromData = String(videoData.video_id || "").trim()
+    if (fromData) return fromData
   }
 
-  queuedPlaylistMediaURL = ""
-  playlistProgressSaveInFlight = true
+  if (typeof player.getVideoUrl === "function") {
+    const fromURL = videoIdFromURL(player.getVideoUrl())
+    if (fromURL) return fromURL
+  }
+
+  return ""
+}
+
+async function persistCurrentPlaylistVideo() {
+  if (!player || mediaMode.kind !== "playlist" || !mediaMode.playlistId) return
+
+  const currentVideoId = getCurrentPlayerVideoId()
+  if (!currentVideoId) return
+  if (currentVideoId === lastObservedPlaylistVideoId) return
+  lastObservedPlaylistVideoId = currentVideoId
+
+  const nextURL = buildPlaylistMediaURL(currentVideoId, mediaMode.playlistId)
+  if (!nextURL) return
+
+  if (nextURL === currentMediaURLFromConfig()) return
 
   try {
     const res = await fetch("/api/settings/current/field", {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ field: "media_url", value: nextURL }),
+      body: JSON.stringify({ field: "media_url", value: nextURL, broadcast: false }),
     })
     if (!res.ok) {
       throw new Error(`playlist progress save failed: ${res.status}`)
     }
-    lastPersistedPlaylistMediaURL = nextURL
   } catch (err) {
     console.warn("failed to persist current playlist video", err)
-  } finally {
-    playlistProgressSaveInFlight = false
-    if (queuedPlaylistMediaURL && queuedPlaylistMediaURL !== lastPersistedPlaylistMediaURL) {
-      setTimeout(flushPlaylistProgressSave, 0)
-    }
   }
-}
-
-function queuePlaylistProgressSave() {
-  if (!player || mediaMode.kind !== "playlist" || !mediaMode.playlistId) return
-  if (typeof player.getVideoData !== "function") return
-
-  const videoData = player.getVideoData() || {}
-  const currentVideoId = String(videoData.video_id || "").trim()
-  if (!currentVideoId) return
-
-  const nextURL = buildPlaylistMediaURL(currentVideoId, mediaMode.playlistId)
-  if (!nextURL) return
-  if (nextURL === currentMediaURLFromConfig() || nextURL === lastPersistedPlaylistMediaURL) return
-
-  queuedPlaylistMediaURL = nextURL
-  if (playlistProgressSaveTimer) {
-    clearTimeout(playlistProgressSaveTimer)
-  }
-
-  playlistProgressSaveTimer = setTimeout(() => {
-    playlistProgressSaveTimer = null
-    flushPlaylistProgressSave()
-  }, PLAYLIST_PROGRESS_SAVE_DELAY_MS)
 }
 
 function isInfiniteVideoPlaybackEnabled() {
@@ -475,6 +469,7 @@ function onYouTubeIframeAPIReady() {
 function onPlayerReady(e) {
   resizeYouTubePlayer()
   e.target.playVideo()
+  lastObservedPlaylistVideoId = getCurrentPlayerVideoId() || resolveVideoId()
   applyVideoOffset(bootConfig.layout)
   if (isInfiniteVideoPlaybackEnabled()) {
     startLoopGuard()
@@ -482,8 +477,11 @@ function onPlayerReady(e) {
 }
 
 function onPlayerStateChange(e) {
+  if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.CUED) {
+    persistCurrentPlaylistVideo()
+  }
+
   if (e.data === YT.PlayerState.PLAYING) {
-    queuePlaylistProgressSave()
 
     if (isInfiniteVideoPlaybackEnabled()) {
       startLoopGuard()
@@ -636,7 +634,6 @@ window.addEventListener("resize", () => {
 
 bootstrapSettings().finally(() => {
   mediaMode = resolveMediaMode()
-  lastPersistedPlaylistMediaURL = currentMediaURLFromConfig()
   applyTheme(bootConfig.layout && bootConfig.layout.theme)
   applyVideoLayout(bootConfig.layout)
   applyVideoOffset(bootConfig.layout)

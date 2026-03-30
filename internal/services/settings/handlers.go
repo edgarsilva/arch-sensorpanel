@@ -38,8 +38,9 @@ type createSettingsInput struct {
 }
 
 type patchCurrentFieldInput struct {
-	Field string `json:"field"`
-	Value any    `json:"value"`
+	Field     string `json:"field"`
+	Value     any    `json:"value"`
+	Broadcast *bool  `json:"broadcast,omitempty"`
 }
 
 func (s *Service) IndexPage(c fiber.Ctx) error {
@@ -294,7 +295,12 @@ func (s *Service) PatchCurrentField(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	if s.Server != nil && s.Server.WSHub != nil {
+	shouldBroadcast := true
+	if in.Broadcast != nil {
+		shouldBroadcast = *in.Broadcast
+	}
+
+	if shouldBroadcast && s.Server != nil && s.Server.WSHub != nil {
 		s.Server.WSHub.BroadcastSettingsUpdated(updated.Version)
 	}
 
