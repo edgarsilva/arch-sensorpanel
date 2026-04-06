@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const DefaultDatabaseURI = "data/sensorpanel.db.sqlite3"
+const DefaultDatabaseURI = "~/.config/sensorpanel.db.sqlite3"
 
 const defaultSQLitePragmaOpts = "?mode=rwc" +
 	"&_pragma=journal_mode(WAL)" +
@@ -35,6 +35,10 @@ type Config struct {
 
 type Database struct {
 	*gorm.DB
+}
+
+func ResolveSQLitePath(databaseURI string) (string, error) {
+	return normalizeSQLitePath(databaseURI)
 }
 
 func New(cfg Config) (*Database, error) {
@@ -97,6 +101,12 @@ func normalizeSQLitePath(databaseURI string) (string, error) {
 		path = DefaultDatabaseURI
 	}
 
+	expandedPath, err := expandUserPath(path)
+	if err != nil {
+		return "", err
+	}
+	path = expandedPath
+
 	if strings.Contains(path, "://") {
 		return "", fmt.Errorf("DATABASE_URI must be a sqlite file path, got: %s", path)
 	}
@@ -106,6 +116,26 @@ func normalizeSQLitePath(databaseURI string) (string, error) {
 
 	if err := ensureDirForPath(path); err != nil {
 		return "", err
+	}
+
+	return path, nil
+}
+
+func expandUserPath(path string) (string, error) {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir for DATABASE_URI: %w", err)
+		}
+		return home, nil
+	}
+
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home dir for DATABASE_URI: %w", err)
+		}
+		return filepath.Join(home, path[2:]), nil
 	}
 
 	return path, nil

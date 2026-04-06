@@ -56,6 +56,10 @@
         transform: translate(var(--video-offset-x, 0px), var(--video-offset-y, 0px));
       }
 
+      .video-cover #player iframe {
+        pointer-events: none;
+      }
+
       /* Firefox */
       progress#cpu_temp_progress::-moz-progress-bar {
         background-color: var(--cpu-temp-color);
@@ -124,7 +128,7 @@
 
           <!-- CPU STAT -->
           <div class="stat gap-2">
-            <div class="stat-figure text-primary p-4">
+            <div class="stat-figure text-primary p-4 pl-6">
               <!-- CPU icon -->
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -144,6 +148,7 @@
             <div class="stat-value text-4xl leading-none">
               <span id="cpu_temp">--</span>
               <span class="text-lg align-top">°C</span>
+              <span id="cpu_package_temp" class="text-base align-top text-base-content/60 ml-1"></span>
             </div>
 
             <div id="" class="stat-desc flex flex-col text-base">

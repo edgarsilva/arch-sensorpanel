@@ -351,7 +351,7 @@ Returns a normalized snapshot:
 
 ## Environment Variables
 
-- `DATABASE_URI` SQLite path (default: `data/sensorpanel.db.sqlite3`)
+- `DATABASE_URI` SQLite path (default: `~/.config/sensorpanel.db.sqlite3`)
 - `APP_ENV` app mode (`development` enables verbose SQL logs)
 - `APP_PORT` HTTP port (default in example: `9070`)
 - `APP_SHUTDOWN_TIMEOUT` graceful shutdown timeout (default: `10s`)

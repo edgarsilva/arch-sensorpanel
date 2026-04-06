@@ -47,9 +47,10 @@ type Option func(*Service)
 
 type Snapshot struct {
 	CPU struct {
-		TempC   float64 `json:"temp_c"`
-		UtilPct float64 `json:"util_pct"`
-		PowerW  float64 `json:"power_w"`
+		TempC        float64 `json:"temp_c"`
+		PackageTempC float64 `json:"package_temp_c"`
+		UtilPct      float64 `json:"util_pct"`
+		PowerW       float64 `json:"power_w"`
 	} `json:"cpu"`
 
 	RAM struct {
@@ -152,6 +153,7 @@ func (m *Service) buildSnapshot() Snapshot {
 
 	sensorSnapshot := m.sensorsSampler.Snapshot()
 	resp.CPU.TempC = sensorSnapshot.CPUTempC
+	resp.CPU.PackageTempC = sensorSnapshot.CPUPackageTempC
 	resp.GPU.EdgeC = sensorSnapshot.GPUEdgeC
 	resp.GPU.HotspotC = sensorSnapshot.GPUHotspotC
 	resp.GPU.VramC = sensorSnapshot.GPUVramC

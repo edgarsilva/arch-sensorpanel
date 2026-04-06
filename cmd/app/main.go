@@ -29,12 +29,18 @@ func main() {
 		fmt.Println("✅ All cleanup tasks completed")
 	}()
 
+	resolvedDatabasePath, err := db.ResolveSQLitePath(env.DatabaseURI)
+	if err != nil {
+		log.Fatalf("failed to resolve database path: %v", err)
+	}
+	fmt.Printf("💾  Database file: %s\n", resolvedDatabasePath)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Println("🗄️   Opening Database...")
+	fmt.Println("🗄️ Opening Database...")
 	database, err := db.New(db.Config{
-		DatabaseURI: env.DatabaseURI,
+		DatabaseURI: resolvedDatabasePath,
 		Environment: env.Environment,
 	})
 	if err != nil {

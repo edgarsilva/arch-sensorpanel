@@ -68,3 +68,26 @@ func TestFindFirstValue(t *testing.T) {
 		t.Fatalf("findFirstValue missing got %v, want 0", missing)
 	}
 }
+
+func TestAMDPackageTempSelectionPrefersTdie(t *testing.T) {
+	chip := map[string]any{
+		"Tctl": map[string]any{"temp1_input": json.Number("72.0")},
+		"Tdie": map[string]any{"temp1_input": json.Number("65.5")},
+	}
+
+	got := findFirstValue(chip, []string{"Tdie", "Tctl"}, "temp1_input")
+	if got != 65.5 {
+		t.Fatalf("AMD package temp got %v, want 65.5", got)
+	}
+}
+
+func TestAMDPackageTempSelectionFallsBackToTctl(t *testing.T) {
+	chip := map[string]any{
+		"Tctl": map[string]any{"temp1_input": json.Number("71.25")},
+	}
+
+	got := findFirstValue(chip, []string{"Tdie", "Tctl"}, "temp1_input")
+	if got != 71.25 {
+		t.Fatalf("AMD package temp fallback got %v, want 71.25", got)
+	}
+}

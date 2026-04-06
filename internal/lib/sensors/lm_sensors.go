@@ -12,11 +12,12 @@ import (
 )
 
 type LmSensorsSnapshot struct {
-	CPUTempC    float64
-	GPUEdgeC    float64
-	GPUHotspotC float64
-	GPUVramC    float64
-	GPUPowerW   float64
+	CPUTempC        float64
+	CPUPackageTempC float64
+	GPUEdgeC        float64
+	GPUHotspotC     float64
+	GPUVramC        float64
+	GPUPowerW       float64
 }
 
 type LmSensorsSampler struct {
@@ -72,8 +73,10 @@ func readLmSensors() (*LmSensorsSnapshot, error) {
 
 	if chip, ok := findChip(data, "k10temp"); ok {
 		snapshot.CPUTempC = findFirstValue(chip, []string{"Tctl", "Tdie"}, "temp1_input")
+		snapshot.CPUPackageTempC = findFirstValue(chip, []string{"Tdie", "Tctl"}, "temp1_input")
 	} else if chip, ok := findChip(data, "coretemp"); ok {
 		snapshot.CPUTempC = findFirstValue(chip, []string{"Package id 0", "Core 0"}, "temp1_input")
+		snapshot.CPUPackageTempC = findFirstValue(chip, []string{"Package id 0", "Core 0"}, "temp1_input")
 	}
 
 	if chip, ok := findChip(data, "amdgpu"); ok {

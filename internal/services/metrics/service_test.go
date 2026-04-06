@@ -64,7 +64,7 @@ func TestBuildSnapshotMapsAllValues(t *testing.T) {
 		fakeCPUBusy{util: 33.3},
 		fakeCPUPower{power: 45.6},
 		fakeRAM{snapshot: sensors.SystemRAMSnapshot{TotalGB: 32, UsedGB: 14, AvailGB: 18, UsedPct: 43.75}},
-		fakeLmSensors{snapshot: sensors.LmSensorsSnapshot{CPUTempC: 70.1, GPUEdgeC: 61.2, GPUHotspotC: 75.3, GPUVramC: 79.4, GPUPowerW: 210.5}},
+		fakeLmSensors{snapshot: sensors.LmSensorsSnapshot{CPUTempC: 70.1, CPUPackageTempC: 67.9, GPUEdgeC: 61.2, GPUHotspotC: 75.3, GPUVramC: 79.4, GPUPowerW: 210.5}},
 		fakeGPUBusy{util: 88.8},
 		fakeGPUVRAM{snapshot: sensors.GPUVRAMSnapshot{UsedGB: 7.5, TotalGB: 16, UsedPct: 46.875}},
 	)
@@ -73,6 +73,9 @@ func TestBuildSnapshotMapsAllValues(t *testing.T) {
 
 	if s.CPU.TempC != 70.1 {
 		t.Fatalf("CPU temp mismatch: got %v", s.CPU.TempC)
+	}
+	if s.CPU.PackageTempC != 67.9 {
+		t.Fatalf("CPU package temp mismatch: got %v", s.CPU.PackageTempC)
 	}
 	if s.CPU.UtilPct != 33.3 {
 		t.Fatalf("CPU util mismatch: got %v", s.CPU.UtilPct)
@@ -103,7 +106,7 @@ func TestBuildSnapshotKeepsRAMZeroWhenSamplerFails(t *testing.T) {
 		fakeCPUBusy{util: 10},
 		fakeCPUPower{power: 20},
 		fakeRAM{err: errors.New("ram unavailable")},
-		fakeLmSensors{snapshot: sensors.LmSensorsSnapshot{CPUTempC: 50, GPUEdgeC: 55, GPUPowerW: 100}},
+		fakeLmSensors{snapshot: sensors.LmSensorsSnapshot{CPUTempC: 50, CPUPackageTempC: 48, GPUEdgeC: 55, GPUPowerW: 100}},
 		fakeGPUBusy{util: 30},
 		fakeGPUVRAM{snapshot: sensors.GPUVRAMSnapshot{UsedGB: 4, TotalGB: 8, UsedPct: 50}},
 	)
@@ -113,7 +116,7 @@ func TestBuildSnapshotKeepsRAMZeroWhenSamplerFails(t *testing.T) {
 	if s.RAM.TotalGB != 0 || s.RAM.UsedGB != 0 || s.RAM.AvailGB != 0 || s.RAM.UsedPct != 0 {
 		t.Fatalf("expected zero RAM when sampler errors, got %+v", s.RAM)
 	}
-	if s.CPU.TempC != 50 || s.CPU.UtilPct != 10 || s.CPU.PowerW != 20 {
+	if s.CPU.TempC != 50 || s.CPU.PackageTempC != 48 || s.CPU.UtilPct != 10 || s.CPU.PowerW != 20 {
 		t.Fatalf("non-RAM fields should still map, got CPU=%+v", s.CPU)
 	}
 	if s.GPU.UtilPct != 30 || s.GPU.PowerW != 100 || s.GPU.VramUsedPct != 50 {
