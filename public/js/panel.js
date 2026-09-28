@@ -1,7 +1,10 @@
 let player
 let loopTimer
 let watchdogTimer
-let recoveryGraceTimer
+let settingsWS
+let metricsWS
+let settingsReconnectTimer
+let metricsReconnectTimer
 let mediaMode = { kind: "youtube", videoId: "", playlistId: "" }
 
 const LOOP_GUARD_INTERVAL_MS = 400
@@ -10,25 +13,18 @@ const DEFAULT_VIDEO_ID = "AKfsikEXZHM"
 const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
 const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
 const SETTINGS_RELOAD_DELAY_MS = 350
-const PLAYER_RECOVERY_RELOAD_DELAY_MS = 1500
-const PLAYER_RECOVERY_MIN_INTERVAL_MS = 30000
-const PLAYER_RECOVERY_LAST_RELOAD_KEY = "sensorpanel.playerRecoveryLastReloadAt"
-const PLAYER_WATCHDOG_INTERVAL_MS = 3000
-const PLAYER_STALL_THRESHOLD_MS = 30000
-const PLAYER_STATE_SILENCE_THRESHOLD_MS = 45000
-const PLAYER_API_ERROR_THRESHOLD = 3
-const PLAYER_RECOVERY_RECREATE_GRACE_MS = 15000
+const RECOVERY_RELOAD_WINDOW_MS = 90_000
+const MAX_RECOVERY_RELOADS_PER_WINDOW = 3
+const RECOVERY_RELOAD_SESSION_KEY = "sensorpanel.recovery.reload.window"
 
-let playerRecoveryInProgress = false
-let playerReady = false
-let expectedPlayerToBePlaying = false
-let lastPlayerProgressAt = 0
-let lastPlayerStateAt = 0
-let lastObservedPlayerTime = 0
-let consecutivePlayerAPIErrors = 0
-let playerRecreateAttempts = 0
+let previousPlayerTime = null
+let noProgressChecks = 0
+let playerApiErrorCount = 0
+let recoveryReloadScheduled = false
+let pageUnloading = false
 
 let bootConfig = {
+	media_type: "video",
 	layout: {
 		name: "left",
 		overlay_layout: "column",
@@ -52,6 +48,9 @@ let bootConfig = {
 let bootSettingsVersion = 0
 let settingsReloadScheduled = false
 let lastObservedPlaylistVideoId = ""
+let lastKnownVideoId = ""
+let playlistEntries = []
+let playlistCursor = 0
 
 function clamp(value, min, max) {
 	return Math.min(Math.max(value, min), max)
@@ -164,7 +163,7 @@ function applyVideoOffset(layoutConfig) {
 	playerEl.style.setProperty("--video-offset-y", `${shiftY}px`)
 }
 
-function resizeYouTubePlayer() {
+function resizeYoutubePlayer() {
 	const playerEl = document.getElementById("player")
 	if (!player || !playerEl || typeof player.setSize !== "function") return
 
@@ -271,7 +270,14 @@ function extractVideoIdFromURL(rawURL) {
 			return url.pathname.replace("/", "")
 		}
 		if (url.hostname.includes("youtube.com")) {
-			return url.searchParams.get("v") || ""
+			const fromQuery = url.searchParams.get("v") || ""
+			if (fromQuery) return fromQuery
+
+			const parts = url.pathname.split("/").filter(Boolean)
+			const markerIndex = parts.findIndex((part) => part === "embed" || part === "shorts" || part === "live")
+			if (markerIndex >= 0 && parts[markerIndex + 1]) {
+				return parts[markerIndex + 1]
+			}
 		}
 	} catch (_) {
 		return ""
@@ -290,11 +296,14 @@ function extractPlaylistIdFromURL(rawURL) {
 }
 
 function resolveMediaMode() {
-	const first = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources[0] : null
+	const sources = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources : []
+	const first = sources.find((source) => source && String(source.url || "").trim() !== "") || sources[0] || null
 	const fallback = { kind: "youtube", videoId: DEFAULT_VIDEO_ID, playlistId: "" }
 	if (!first) return fallback
 
-	const kind = String(first.kind || "youtube").toLowerCase()
+	const configuredType = String(bootConfig.media_type || "").toLowerCase()
+	const sourceKind = String(first.kind || "").toLowerCase()
+	const mediaType = configuredType === "playlist" || sourceKind === "playlist" ? "playlist" : "video"
 	const trimmedURL = String(first.url || "").trim()
 	if (!trimmedURL) return fallback
 
@@ -305,7 +314,7 @@ function resolveMediaMode() {
 		return DEFAULT_VIDEO_ID
 	})()
 
-	if (kind === "playlist") {
+	if (mediaType === "playlist") {
 		const playlistId = extractPlaylistIdFromURL(trimmedURL) || trimmedURL
 		if (playlistId) {
 			return { kind: "playlist", videoId, playlistId }
@@ -313,6 +322,77 @@ function resolveMediaMode() {
 	}
 
 	return { kind: "youtube", videoId, playlistId: "" }
+}
+
+function buildPlaylistEntries() {
+	if (String(bootConfig.media_type || "").toLowerCase() !== "playlist") {
+		return []
+	}
+
+	const sources = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources : []
+	const seen = new Set()
+	const entries = []
+
+	for (const source of sources) {
+		const rawURL = String((source && source.url) || "").trim()
+		if (!rawURL) continue
+		const videoId = extractVideoIdFromURL(rawURL)
+		if (!videoId || seen.has(videoId)) continue
+		seen.add(videoId)
+		entries.push({
+			videoId,
+			url: rawURL,
+			label: String((source && source.label) || "").trim(),
+		})
+	}
+
+	return entries
+}
+
+function setupPlaylistRuntime() {
+	playlistEntries = buildPlaylistEntries()
+	if (playlistEntries.length === 0) {
+		playlistCursor = 0
+		return
+	}
+
+	const activeVideoId = resolveVideoId()
+	const index = playlistEntries.findIndex((entry) => entry.videoId === activeVideoId)
+	playlistCursor = index >= 0 ? index : 0
+}
+
+function syncPlaylistCursorWithCurrentVideo() {
+	if (playlistEntries.length === 0) return
+	const currentVideoId = getCurrentPlayerVideoId()
+	if (!currentVideoId) return
+	const index = playlistEntries.findIndex((entry) => entry.videoId === currentVideoId)
+	if (index >= 0) {
+		playlistCursor = index
+	}
+}
+
+function playPlaylistIndex(index, reason) {
+	if (!player || playlistEntries.length === 0) return
+
+	const total = playlistEntries.length
+	const nextIndex = ((index % total) + total) % total
+	const entry = playlistEntries[nextIndex]
+	if (!entry || !entry.videoId) return
+
+	try {
+		playlistCursor = nextIndex
+		player.loadVideoById(entry.videoId)
+		playerApiErrorCount = 0
+		noProgressChecks = 0
+		previousPlayerTime = null
+		console.info("manual playlist navigation", { reason, playlistCursor, videoId: entry.videoId })
+	} catch (err) {
+		playerApiErrorCount += 1
+		console.warn("player api exception", { methodName: "loadVideoById", playerApiErrorCount, err })
+		if (playerApiErrorCount >= 3) {
+			attemptPlayerRecovery(`api_exception_${reason}`)
+		}
+	}
 }
 
 function setPlaylistControlsVisible(visible) {
@@ -327,14 +407,14 @@ function bindPlaylistControls() {
 	if (!prevBtn || !nextBtn) return
 
 	prevBtn.addEventListener("click", () => {
-		if (player && typeof player.previousVideo === "function") {
-			player.previousVideo()
+		if (mediaMode.kind === "playlist" && playlistEntries.length > 0) {
+			playPlaylistIndex(playlistCursor - 1, "manual_prev")
 		}
 	})
 
 	nextBtn.addEventListener("click", () => {
-		if (player && typeof player.nextVideo === "function") {
-			player.nextVideo()
+		if (mediaMode.kind === "playlist" && playlistEntries.length > 0) {
+			playPlaylistIndex(playlistCursor + 1, "manual_next")
 		}
 	})
 }
@@ -344,7 +424,8 @@ function resolveVideoId() {
 }
 
 function currentMediaURLFromConfig() {
-	const first = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources[0] : null
+	const sources = Array.isArray(bootConfig.media_sources) ? bootConfig.media_sources : []
+	const first = sources.find((source) => source && String(source.url || "").trim() !== "") || sources[0] || null
 	return String((first && first.url) || "").trim()
 }
 
@@ -356,13 +437,7 @@ function buildPlaylistMediaURL(videoId, playlistId) {
 }
 
 function videoIdFromURL(rawURL) {
-	if (!rawURL) return ""
-	try {
-		const url = new URL(rawURL)
-		return String(url.searchParams.get("v") || "").trim()
-	} catch (_) {
-		return ""
-	}
+	return String(extractVideoIdFromURL(rawURL) || "").trim()
 }
 
 function getCurrentPlayerVideoId() {
@@ -428,53 +503,122 @@ async function bootstrapSettings() {
 }
 
 function scheduleSettingsReload() {
-	if (settingsReloadScheduled) return
+	if (settingsReloadScheduled || recoveryReloadScheduled) return
 	settingsReloadScheduled = true
+	closeRealtimeConnections()
 	setTimeout(() => {
 		window.location.reload()
 	}, SETTINGS_RELOAD_DELAY_MS)
 }
 
-function schedulePlayerRecoveryReload(reason) {
-	if (settingsReloadScheduled) return
-
-	const now = Date.now()
-	const lastReloadRaw = window.sessionStorage.getItem(PLAYER_RECOVERY_LAST_RELOAD_KEY)
-	const lastReloadAt = Number(lastReloadRaw) || 0
-	if (lastReloadAt > 0 && now - lastReloadAt < PLAYER_RECOVERY_MIN_INTERVAL_MS) {
-		console.warn("player recovery reload suppressed due to cooldown", { reason })
-		return
+function resetRecoveryReloadWindow() {
+	try {
+		sessionStorage.removeItem(RECOVERY_RELOAD_SESSION_KEY)
+	} catch (_) {
 	}
-
-	settingsReloadScheduled = true
-	console.warn("player failure detected, reloading page", { reason })
-	window.sessionStorage.setItem(PLAYER_RECOVERY_LAST_RELOAD_KEY, String(now))
-
-	setTimeout(() => {
-		window.location.reload()
-	}, PLAYER_RECOVERY_RELOAD_DELAY_MS)
 }
 
-function isExpectedYouTubeSrc(src) {
-	if (!src) return false
+function canTriggerRecoveryReload() {
+	const now = Date.now()
 	try {
-		const url = new URL(src)
-		return url.hostname === "www.youtube.com" || url.hostname === "youtube.com" || url.hostname === "www.youtube-nocookie.com" || url.hostname === "youtube-nocookie.com"
+		const raw = sessionStorage.getItem(RECOVERY_RELOAD_SESSION_KEY)
+		let windowStart = now
+		let count = 0
+
+		if (raw) {
+			const parsed = JSON.parse(raw)
+			const parsedWindowStart = Number(parsed && parsed.windowStart)
+			const parsedCount = Number(parsed && parsed.count)
+			if (Number.isFinite(parsedWindowStart) && Number.isFinite(parsedCount) && now - parsedWindowStart <= RECOVERY_RELOAD_WINDOW_MS) {
+				windowStart = parsedWindowStart
+				count = parsedCount
+			}
+		}
+
+		count += 1
+		sessionStorage.setItem(RECOVERY_RELOAD_SESSION_KEY, JSON.stringify({ windowStart, count }))
+		return count <= MAX_RECOVERY_RELOADS_PER_WINDOW
 	} catch (_) {
-		return false
+		return true
 	}
+}
+
+function showRecoveryFailureState(reason) {
+	setConnectionState("reconnecting")
+	const text = document.getElementById("conn_text")
+	if (text) {
+		text.textContent = "player failed"
+	}
+	console.error("player recovery aborted to prevent reload loop", { reason })
+}
+
+function clearSettingsReconnectTimer() {
+	if (!settingsReconnectTimer) return
+	clearTimeout(settingsReconnectTimer)
+	settingsReconnectTimer = null
+}
+
+function clearMetricsReconnectTimer() {
+	if (!metricsReconnectTimer) return
+	clearTimeout(metricsReconnectTimer)
+	metricsReconnectTimer = null
+}
+
+function closeSettingsSocket() {
+	clearSettingsReconnectTimer()
+	if (!settingsWS) return
+	const ws = settingsWS
+	settingsWS = null
+	ws.onopen = null
+	ws.onmessage = null
+	ws.onerror = null
+	ws.onclose = null
+	try {
+		ws.close()
+	} catch (_) {
+	}
+}
+
+function closeMetricsSocket() {
+	clearMetricsReconnectTimer()
+	if (!metricsWS) return
+	const ws = metricsWS
+	metricsWS = null
+	ws.onopen = null
+	ws.onmessage = null
+	ws.onerror = null
+	ws.onclose = null
+	try {
+		ws.close()
+	} catch (_) {
+	}
+}
+
+function closeRealtimeConnections() {
+	closeSettingsSocket()
+	closeMetricsSocket()
+}
+
+function triggerHardReload(reason) {
+	if (recoveryReloadScheduled || pageUnloading) return
+	recoveryReloadScheduled = true
+	console.warn("player recovery reloading page", { reason, previousPlayerTime, playerApiErrorCount })
+	closeRealtimeConnections()
+	setTimeout(() => {
+		window.location.reload()
+	}, 0)
 }
 
 function safePlayerCall(methodName) {
 	if (!player || typeof player[methodName] !== "function") return { ok: false, missing: true }
 	try {
 		const value = player[methodName]()
-		consecutivePlayerAPIErrors = 0
+		playerApiErrorCount = 0
 		return { ok: true, value }
 	} catch (err) {
-		consecutivePlayerAPIErrors += 1
-		console.warn("player api exception", { methodName, consecutivePlayerAPIErrors, err })
-		if (consecutivePlayerAPIErrors >= PLAYER_API_ERROR_THRESHOLD) {
+		playerApiErrorCount += 1
+		console.warn("player api exception", { methodName, playerApiErrorCount, err })
+		if (playerApiErrorCount >= 3) {
 			attemptPlayerRecovery(`api_exception_${methodName}`)
 		}
 		return { ok: false, error: err }
@@ -488,87 +632,66 @@ function stopPlayerWatchdog() {
 	}
 }
 
-function markPlayerRecovered(reason) {
-	if (!playerRecoveryInProgress) return
-	playerRecoveryInProgress = false
-	playerRecreateAttempts = 0
-	if (recoveryGraceTimer) {
-		clearTimeout(recoveryGraceTimer)
-		recoveryGraceTimer = null
-	}
-	console.info("player recovery succeeded", { reason })
+function resetWatchdogFailureCounters() {
+	noProgressChecks = 0
 }
 
 function startPlayerWatchdog() {
 	stopPlayerWatchdog()
 	watchdogTimer = setInterval(() => {
-		if (!player || !playerReady) return
+		if (!player || recoveryReloadScheduled || pageUnloading) return
 
-		const now = Date.now()
-
-		if (lastPlayerStateAt > 0 && now - lastPlayerStateAt > PLAYER_STATE_SILENCE_THRESHOLD_MS) {
-			attemptPlayerRecovery("no_state_events")
+		if (document.hidden) {
+			previousPlayerTime = null
+			noProgressChecks = 0
 			return
 		}
 
-		const iframeResult = safePlayerCall("getIframe")
-		if (iframeResult.ok) {
-			const iframe = iframeResult.value
-			const iframeSrc = iframe && typeof iframe.src === "string" ? iframe.src : ""
-			if (!isExpectedYouTubeSrc(iframeSrc)) {
-				console.warn("player watchdog detected unexpected iframe src", { iframeSrc })
-				attemptPlayerRecovery("iframe_src_invalid")
-				return
-			}
-		}
-
 		const stateResult = safePlayerCall("getPlayerState")
-		if (stateResult.ok && typeof stateResult.value === "number") {
-			const state = stateResult.value
-			if (window.YT && YT.PlayerState) {
-				expectedPlayerToBePlaying = state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING || state === YT.PlayerState.CUED
-			}
+		if (!stateResult.ok) return
+		if (!(window.YT && YT.PlayerState) || stateResult.value !== YT.PlayerState.PLAYING) {
+			previousPlayerTime = null
+			noProgressChecks = 0
+			return
 		}
 
 		const timeResult = safePlayerCall("getCurrentTime")
-		if (timeResult.ok) {
-			const currentTime = Number(timeResult.value) || 0
-			if (currentTime > lastObservedPlayerTime + 0.05) {
-				lastObservedPlayerTime = currentTime
-				lastPlayerProgressAt = now
-				markPlayerRecovered("time_progress")
-			}
+		if (!timeResult.ok) return
+
+		const currentTime = Number(timeResult.value) || 0
+		if (previousPlayerTime === null) {
+			console.debug("player watchdog baseline set", { currentTime })
+			previousPlayerTime = currentTime
+			noProgressChecks = 0
+			return
 		}
 
-		if (expectedPlayerToBePlaying && lastPlayerProgressAt > 0 && now - lastPlayerProgressAt > PLAYER_STALL_THRESHOLD_MS) {
+		const delta = Math.abs(currentTime - previousPlayerTime)
+		const progressed = delta > 0.5
+
+		if (progressed) {
+			previousPlayerTime = currentTime
+			noProgressChecks = 0
+			return
+		}
+
+		noProgressChecks += 1
+		if (noProgressChecks === 1) {
+			console.debug("player watchdog no video progress", { previousPlayerTime, currentTime, delta, failedChecks: noProgressChecks })
+		}
+		if (noProgressChecks >= 4) {
+			console.warn("player watchdog triggering recovery", {
+				reason: "stalled_time",
+				failedChecks: noProgressChecks,
+				currentTime,
+				delta,
+			})
 			attemptPlayerRecovery("stalled_time")
 		}
-	}, PLAYER_WATCHDOG_INTERVAL_MS)
+	}, 2000)
 }
 
-function destroyPlayerInstance() {
-	if (!player) return
-	try {
-		if (typeof player.destroy === "function") {
-			player.destroy()
-		}
-	} catch (err) {
-		console.warn("failed to destroy player instance", { err })
-	}
-	player = null
-	playerReady = false
-}
-
-function rebuildPlayerMountNode() {
-	const currentNode = document.getElementById("player")
-	if (!currentNode || !currentNode.parentNode) return false
-	const nextNode = document.createElement("div")
-	nextNode.id = "player"
-	currentNode.parentNode.replaceChild(nextNode, currentNode)
-	return true
-}
-
-function createYouTubePlayer() {
+function createYoutubePlayer() {
 	if (!window.YT || typeof YT.Player !== "function") {
 		console.warn("youtube iframe api not ready during player creation")
 		return false
@@ -578,17 +701,12 @@ function createYouTubePlayer() {
 		autoplay: 1,
 		mute: 1,
 		controls: 0,
-		disablekb: 1,
+		disablekb: 0,
 		fs: 0,
 		iv_load_policy: 3,
 		rel: 0,
 		playsinline: 1,
 		origin: window.location.origin,
-	}
-
-	if (mediaMode.kind === "playlist" && mediaMode.playlistId) {
-		playerVars.listType = "playlist"
-		playerVars.list = mediaMode.playlistId
 	}
 
 	player = new YT.Player("player", {
@@ -604,52 +722,48 @@ function createYouTubePlayer() {
 	return true
 }
 
+function applyYoutubeIframeAttributes() {
+	if (!player || typeof player.getIframe !== "function") return
+	try {
+		const iframe = player.getIframe()
+		if (!iframe) return
+		iframe.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share")
+		iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin")
+		iframe.setAttribute("frameborder", "0")
+		iframe.setAttribute("allowfullscreen", "")
+		iframe.setAttribute("title", "Background video player")
+	} catch (_) {
+	}
+}
+
 function attemptPlayerRecovery(reason) {
-	if (settingsReloadScheduled) return
-	if (playerRecoveryInProgress) {
-		console.warn("player recovery already in progress", { reason })
+	if (recoveryReloadScheduled || pageUnloading) {
 		return
 	}
-
-	playerRecoveryInProgress = true
-	playerRecreateAttempts += 1
-	console.warn("player watchdog recovery starting", {
-		reason,
-		attempt: playerRecreateAttempts,
-		lastPlayerProgressAt,
-		lastPlayerStateAt,
-		lastObservedPlayerTime,
-		consecutivePlayerAPIErrors,
-	})
 
 	stopLoopGuard()
 	stopPlayerWatchdog()
-	expectedPlayerToBePlaying = false
-
-	destroyPlayerInstance()
-	if (!rebuildPlayerMountNode()) {
-		schedulePlayerRecoveryReload(`rebuild_mount_failed_${reason}`)
+	resetWatchdogFailureCounters()
+	if (!canTriggerRecoveryReload()) {
+		showRecoveryFailureState(reason)
 		return
 	}
-
-	if (!createYouTubePlayer()) {
-		schedulePlayerRecoveryReload(`recreate_player_failed_${reason}`)
-		return
-	}
-
-	if (recoveryGraceTimer) {
-		clearTimeout(recoveryGraceTimer)
-	}
-	recoveryGraceTimer = setTimeout(() => {
-		console.warn("player watchdog recovery timed out; escalating to reload", { reason, attempt: playerRecreateAttempts })
-		schedulePlayerRecoveryReload(`recreate_timeout_${reason}`)
-	}, PLAYER_RECOVERY_RECREATE_GRACE_MS)
+	triggerHardReload(reason)
 }
 
 function connectSettingsSocket() {
+	if (settingsReloadScheduled || recoveryReloadScheduled || pageUnloading) return
+	clearSettingsReconnectTimer()
+	if (settingsWS && (settingsWS.readyState === WebSocket.CONNECTING || settingsWS.readyState === WebSocket.OPEN)) {
+		return
+	}
+	closeSettingsSocket()
+
 	const ws = new WebSocket(SETTINGS_WS_URL)
+	settingsWS = ws
 
 	ws.onmessage = (event) => {
+		if (ws !== settingsWS) return
 		try {
 			const payload = JSON.parse(event.data)
 			if (!payload || payload.type !== "settings.updated") return
@@ -663,17 +777,23 @@ function connectSettingsSocket() {
 	}
 
 	ws.onerror = () => {
+		if (ws !== settingsWS) return
 		ws.close()
 	}
 
 	ws.onclose = () => {
-		if (settingsReloadScheduled) return
-		setTimeout(connectSettingsSocket, 2000)
+		if (ws !== settingsWS) return
+		settingsWS = null
+		if (settingsReloadScheduled || recoveryReloadScheduled || pageUnloading) return
+		settingsReconnectTimer = setTimeout(() => {
+			settingsReconnectTimer = null
+			connectSettingsSocket()
+		}, 2000)
 	}
 }
 
 function onYouTubeIframeAPIReady() {
-	createYouTubePlayer()
+	createYoutubePlayer()
 }
 
 function onPlayerError(e) {
@@ -682,16 +802,16 @@ function onPlayerError(e) {
 }
 
 function onPlayerReady(e) {
-	playerReady = true
-	const now = Date.now()
-	lastPlayerStateAt = now
-	lastPlayerProgressAt = now
-	lastObservedPlayerTime = 0
-	consecutivePlayerAPIErrors = 0
-	expectedPlayerToBePlaying = true
-	resizeYouTubePlayer()
+	resetRecoveryReloadWindow()
+	previousPlayerTime = null
+	noProgressChecks = 0
+	playerApiErrorCount = 0
+	applyYoutubeIframeAttributes()
+	resizeYoutubePlayer()
 	e.target.playVideo()
-	lastObservedPlaylistVideoId = getCurrentPlayerVideoId() || resolveVideoId()
+	syncPlaylistCursorWithCurrentVideo()
+	lastKnownVideoId = getCurrentPlayerVideoId() || resolveVideoId()
+	lastObservedPlaylistVideoId = lastKnownVideoId
 	applyVideoOffset(bootConfig.layout)
 	startPlayerWatchdog()
 	if (isInfiniteVideoPlaybackEnabled()) {
@@ -700,16 +820,17 @@ function onPlayerReady(e) {
 }
 
 function onPlayerStateChange(e) {
-	lastPlayerStateAt = Date.now()
-
 	if (e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.CUED) {
+		const currentVideoId = getCurrentPlayerVideoId()
+		if (currentVideoId) {
+			lastKnownVideoId = currentVideoId
+		}
+		syncPlaylistCursorWithCurrentVideo()
 		persistCurrentPlaylistVideo()
 	}
 
 	if (e.data === YT.PlayerState.PLAYING) {
-		expectedPlayerToBePlaying = true
-		lastPlayerProgressAt = Date.now()
-		markPlayerRecovered("state_playing")
+		resetRecoveryReloadWindow()
 
 		if (isInfiniteVideoPlaybackEnabled()) {
 			startLoopGuard()
@@ -718,18 +839,30 @@ function onPlayerStateChange(e) {
 		}
 	}
 
-	if (e.data === YT.PlayerState.BUFFERING || e.data === YT.PlayerState.CUED) {
-		expectedPlayerToBePlaying = true
-	}
-
-	if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.UNSTARTED) {
-		expectedPlayerToBePlaying = false
-	}
-
 	if (e.data === YT.PlayerState.ENDED) {
-		expectedPlayerToBePlaying = false
 		if (isInfiniteVideoPlaybackEnabled()) {
-			restart()
+			const videoId = lastKnownVideoId || getCurrentPlayerVideoId() || resolveVideoId()
+			if (videoId && player && typeof player.loadVideoById === "function") {
+				try {
+					player.loadVideoById(videoId, 0)
+					playerApiErrorCount = 0
+					noProgressChecks = 0
+					previousPlayerTime = null
+				} catch (err) {
+					playerApiErrorCount += 1
+					console.warn("player api exception", { methodName: "loadVideoById(loop)", playerApiErrorCount, err })
+					if (playerApiErrorCount >= 3) {
+						attemptPlayerRecovery("api_exception_loop_reload")
+					}
+				}
+			} else {
+				restart()
+			}
+			return
+		}
+
+		if (mediaMode.kind === "playlist" && playlistEntries.length > 0) {
+			playPlaylistIndex(playlistCursor + 1, "auto_next")
 		}
 	}
 }
@@ -765,11 +898,11 @@ function restart() {
 		}
 		player.seekTo(0.25, true)
 		player.playVideo()
-		consecutivePlayerAPIErrors = 0
+		playerApiErrorCount = 0
 	} catch (err) {
-		consecutivePlayerAPIErrors += 1
-		console.warn("player api exception", { methodName: "restart", consecutivePlayerAPIErrors, err })
-		if (consecutivePlayerAPIErrors >= PLAYER_API_ERROR_THRESHOLD) {
+		playerApiErrorCount += 1
+		console.warn("player api exception", { methodName: "restart", playerApiErrorCount, err })
+		if (playerApiErrorCount >= 3) {
 			attemptPlayerRecovery("api_exception_restart")
 		}
 	}
@@ -858,14 +991,24 @@ function setConnectionState(state) {
 }
 
 function connectMetricsSocket() {
+	if (recoveryReloadScheduled || pageUnloading) return
+	clearMetricsReconnectTimer()
+	if (metricsWS && (metricsWS.readyState === WebSocket.CONNECTING || metricsWS.readyState === WebSocket.OPEN)) {
+		return
+	}
+	closeMetricsSocket()
+
 	setConnectionState("connecting")
 	const ws = new WebSocket(WS_URL)
+	metricsWS = ws
 
 	ws.onopen = () => {
+		if (ws !== metricsWS) return
 		setConnectionState("live")
 	}
 
 	ws.onmessage = (event) => {
+		if (ws !== metricsWS) return
 		try {
 			updateUI(JSON.parse(event.data))
 		} catch (err) {
@@ -874,41 +1017,48 @@ function connectMetricsSocket() {
 	}
 
 	ws.onerror = () => {
+		if (ws !== metricsWS) return
 		setConnectionState("reconnecting")
 		ws.close()
 	}
 
 	ws.onclose = () => {
+		if (ws !== metricsWS) return
+		metricsWS = null
+		if (recoveryReloadScheduled || pageUnloading) return
 		setConnectionState("reconnecting")
-		setTimeout(connectMetricsSocket, 2000)
+		metricsReconnectTimer = setTimeout(() => {
+			metricsReconnectTimer = null
+			connectMetricsSocket()
+		}, 2000)
 	}
 }
 
 window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady
 
 window.addEventListener("resize", () => {
-	resizeYouTubePlayer()
+	resizeYoutubePlayer()
 	applyVideoOffset(bootConfig.layout)
 })
 
 window.addEventListener("beforeunload", () => {
+	pageUnloading = true
 	stopLoopGuard()
 	stopPlayerWatchdog()
-	if (recoveryGraceTimer) {
-		clearTimeout(recoveryGraceTimer)
-		recoveryGraceTimer = null
-	}
+	closeRealtimeConnections()
 })
 
 bootstrapSettings().finally(() => {
 	mediaMode = resolveMediaMode()
+	setupPlaylistRuntime()
 	applyTheme(bootConfig.layout && bootConfig.layout.theme)
 	applyVideoLayout(bootConfig.layout)
 	applyVideoOffset(bootConfig.layout)
+
 	applyLayout(bootConfig.layout)
 	applyOverlayPadding(bootConfig.layout)
 	applyMetricsTuning(bootConfig.layout)
-	setPlaylistControlsVisible(mediaMode.kind === "playlist")
+	setPlaylistControlsVisible(mediaMode.kind === "playlist" && playlistEntries.length > 1)
 	bindPlaylistControls()
 	connectSettingsSocket()
 	connectMetricsSocket()

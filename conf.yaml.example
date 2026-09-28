@@ -1,0 +1,5 @@
+environment: development
+app_port: 9070
+database_uri: "~/.config/sensorpanel/db.sqlite3"
+app_shutdown_timeout: 10s
+youtube_api_key: ""

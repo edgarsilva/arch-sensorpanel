@@ -3,14 +3,6 @@ BINARY := sensorpanel
 INSTALL_DIR ?= $(HOME)/.local/bin
 SHELL := /bin/bash
 
-ifneq ($(wildcard ./.env),)
-  include .env
-  export
-else
-  env_check = $(shell echo "🟡 WARNING: .env file not found! continue only with exported shell env variables\n\n")
-  $(info ${env_check})
-endif
-
 .DEFAULT_GOAL := help
 .PHONY: help build install dev run air-check
 
@@ -45,3 +37,7 @@ dev: ## Run app with Air (hot reload)
 
 run: ## Run app once with go run
 	go run ./cmd/app
+
+daemon: install ## Run app as a daemon from system installed
+	nohup sensorpanel >/dev/null 2>&1 &
+

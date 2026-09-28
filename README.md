@@ -177,10 +177,11 @@ sudo sensors-detect
 go install github.com/air-verse/air@latest
 ```
 
-2. Create local env file:
+2. Create runtime config file:
 
 ```bash
-cp .env.example .env
+mkdir -p ~/.config/sensorpanel
+cp conf.yaml.example ~/.config/sensorpanel/conf.yaml
 ```
 
 3. Run in dev mode (hot reload):
@@ -349,12 +350,17 @@ Returns a normalized snapshot:
 
 ---
 
-## Environment Variables
+## Runtime Config
 
-- `DATABASE_URI` SQLite path (default: `~/.config/sensorpanel.db.sqlite3`)
-- `APP_ENV` app mode (`development` enables verbose SQL logs)
-- `APP_PORT` HTTP port (default in example: `9070`)
-- `APP_SHUTDOWN_TIMEOUT` graceful shutdown timeout (default: `10s`)
+Configuration is loaded from `~/.config/sensorpanel/conf.yaml`.
+
+Supported keys:
+
+- `database_uri` SQLite path (default: `~/.config/sensorpanel/db.sqlite3`)
+- `environment` app mode (`development` enables verbose SQL logs)
+- `app_port` HTTP port (default: `9070`)
+- `app_shutdown_timeout` graceful shutdown timeout (default: `1s`)
+- `youtube_api_key` required for playlist expansion into `media_sources`
 
 ---
 

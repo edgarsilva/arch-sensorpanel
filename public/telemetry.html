@@ -38,6 +38,18 @@
           <pre><code id="settings-json">waiting for settings updates...</code></pre>
         </div>
       </div>
+
+      <div class="mt-6 rounded-box border border-base-300 bg-base-100 p-4">
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/70">Settings Bootstrap</h2>
+          <span id="bootstrap-status" class="badge badge-warning">loading</span>
+        </div>
+        <p class="mb-2 text-sm text-base-content/70">Fetched at: <span id="bootstrap-last-update">--</span></p>
+        <div class="mockup-code text-sm">
+          <pre data-prefix="$"><code>http /api/settings/current</code></pre>
+          <pre><code id="bootstrap-json">waiting for bootstrap settings...</code></pre>
+        </div>
+      </div>
     </main>
 
     <script>
@@ -47,6 +59,9 @@
       const settingsStatusEl = document.getElementById("settings-status")
       const settingsCodeEl = document.getElementById("settings-json")
       const settingsLastUpdateEl = document.getElementById("settings-last-update")
+      const bootstrapStatusEl = document.getElementById("bootstrap-status")
+      const bootstrapCodeEl = document.getElementById("bootstrap-json")
+      const bootstrapLastUpdateEl = document.getElementById("bootstrap-last-update")
       const WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/metrics/ws`
       const SETTINGS_WS_URL = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/settings/ws`
 
@@ -82,6 +97,43 @@
 
         settingsStatusEl.className = "badge badge-warning"
         settingsStatusEl.textContent = "connecting"
+      }
+
+      function setBootstrapStatus(state) {
+        if (state === "live") {
+          bootstrapStatusEl.className = "badge badge-success"
+          bootstrapStatusEl.textContent = "live"
+          return
+        }
+
+        if (state === "failed") {
+          bootstrapStatusEl.className = "badge badge-error"
+          bootstrapStatusEl.textContent = "failed"
+          return
+        }
+
+        bootstrapStatusEl.className = "badge badge-warning"
+        bootstrapStatusEl.textContent = "loading"
+      }
+
+      async function fetchBootstrap() {
+        setBootstrapStatus("loading")
+        try {
+          const res = await fetch("/api/settings/current", {
+            headers: { Accept: "application/json" },
+          })
+          if (!res.ok) {
+            throw new Error(`status ${res.status}`)
+          }
+          const payload = await res.json()
+          bootstrapCodeEl.textContent = JSON.stringify(payload, null, 2)
+          bootstrapLastUpdateEl.textContent = new Date().toLocaleTimeString()
+          setBootstrapStatus("live")
+        } catch (err) {
+          bootstrapCodeEl.textContent = `failed to fetch bootstrap\n${String(err)}`
+          bootstrapLastUpdateEl.textContent = new Date().toLocaleTimeString()
+          setBootstrapStatus("failed")
+        }
       }
 
       function connect() {
@@ -121,6 +173,7 @@
             const payload = JSON.parse(event.data)
             settingsCodeEl.textContent = JSON.stringify(payload, null, 2)
             settingsLastUpdateEl.textContent = new Date().toLocaleTimeString()
+            fetchBootstrap()
           } catch (err) {
             settingsCodeEl.textContent = `invalid payload\n${String(err)}`
           }
@@ -138,6 +191,7 @@
 
       connect()
       connectSettingsWS()
+      fetchBootstrap()
     </script>
   </body>
 </html>

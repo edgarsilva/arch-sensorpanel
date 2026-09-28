@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sensor Panel Isolation Player</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+
+      #video_bg {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      #video_bg iframe {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 177.78vh;
+        height: 100vh;
+        min-width: 100vw;
+        min-height: 56.25vw;
+        transform: translate(-50%, -50%);
+        border: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="video_bg">
+      <iframe
+		src="https://www.youtube.com/embed/PuEPbC2mOQI?si=6yqgibd4u4tEKiFb&autoplay=1&mute=1&playsinline=1"
+		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+		referrerpolicy="strict-origin-when-cross-origin"
+        title="Isolated background video"
+		frameborder="0"
+        allowfullscreen
+      ></iframe>
+    </div>
+  </body>
+</html>
+
+

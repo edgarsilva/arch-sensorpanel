@@ -75,6 +75,11 @@ func (s *Service) CreateVersionFromID(ctx context.Context, id uint, config model
 }
 
 func (s *Service) UpdateCurrent(ctx context.Context, config models.SettingsConfig) (*models.Settings, error) {
+	normalizeConfigMedia(&config)
+	if err := s.expandPlaylistMediaSources(ctx, &config); err != nil {
+		return nil, err
+	}
+
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -143,10 +148,17 @@ func (s *Service) DecodeConfig(row *models.Settings) (models.SettingsConfig, err
 		return models.SettingsConfig{}, db.WrapWithOp("decode settings config", err)
 	}
 
+	normalizeConfigMedia(&cfg)
+
 	return cfg, nil
 }
 
 func (s *Service) createVersion(ctx context.Context, config models.SettingsConfig) (*models.Settings, error) {
+	normalizeConfigMedia(&config)
+	if err := s.expandPlaylistMediaSources(ctx, &config); err != nil {
+		return nil, err
+	}
+
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -192,6 +204,15 @@ func (s *Service) createVersion(ctx context.Context, config models.SettingsConfi
 }
 
 func validateConfig(config models.SettingsConfig) error {
+	mediaType := normalizeMediaTypeValue(config.MediaType, config.MediaSources)
+	if mediaType != "video" && mediaType != "playlist" {
+		return fmt.Errorf("%w: unsupported media_type %q", ErrInvalidConfig, config.MediaType)
+	}
+
+	if len(config.MediaSources) == 0 {
+		return fmt.Errorf("%w: media_sources is required", ErrInvalidConfig)
+	}
+
 	layout := strings.ToLower(strings.TrimSpace(config.Layout.Name))
 	if layout != "left" && layout != "right" && layout != "center" && layout != "cover" {
 		return fmt.Errorf("%w: unsupported layout %q", ErrInvalidConfig, config.Layout.Name)
@@ -293,10 +314,60 @@ func validateConfig(config models.SettingsConfig) error {
 		if strings.TrimSpace(source.URL) == "" {
 			return fmt.Errorf("%w: media_sources[%d].url is required", ErrInvalidConfig, i)
 		}
-		if strings.TrimSpace(source.Kind) == "" {
-			return fmt.Errorf("%w: media_sources[%d].kind is required", ErrInvalidConfig, i)
+
+		kind := strings.ToLower(strings.TrimSpace(source.Kind))
+		if kind != "" && kind != "youtube" && kind != "video" && kind != "playlist" {
+			return fmt.Errorf("%w: unsupported media_sources[%d].kind %q", ErrInvalidConfig, i, source.Kind)
 		}
 	}
 
 	return nil
+}
+
+func normalizeConfigMedia(config *models.SettingsConfig) {
+	if config == nil {
+		return
+	}
+
+	config.MediaType = normalizeMediaTypeValue(config.MediaType, config.MediaSources)
+
+	for i := range config.MediaSources {
+		kind := strings.ToLower(strings.TrimSpace(config.MediaSources[i].Kind))
+		if kind == "" {
+			config.MediaSources[i].Kind = config.MediaType
+			continue
+		}
+
+		if kind == "youtube" || kind == "video" || kind == "playlist" {
+			config.MediaSources[i].Kind = kind
+			continue
+		}
+
+		config.MediaSources[i].Kind = config.MediaType
+	}
+}
+
+func normalizeMediaTypeValue(raw string, sources []models.SettingsMediaSource) string {
+	mediaType := strings.ToLower(strings.TrimSpace(raw))
+	if mediaType == "playlist" {
+		return "playlist"
+	}
+	if mediaType == "video" || mediaType == "youtube" {
+		return "video"
+	}
+
+	for _, source := range sources {
+		kind := strings.ToLower(strings.TrimSpace(source.Kind))
+		if kind == "playlist" {
+			return "playlist"
+		}
+	}
+
+	for _, source := range sources {
+		if extractPlaylistIDFromRaw(source.URL) != "" {
+			return "playlist"
+		}
+	}
+
+	return "video"
 }

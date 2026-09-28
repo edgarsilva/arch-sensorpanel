@@ -2,102 +2,84 @@ package appenv
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/edgarsilva/simpleenv"
 )
 
-func loadForTest() (*Env, error) {
-	env := &Env{AppShutdownTimeout: 1 * time.Second}
-	if err := simpleenv.Load(env); err != nil {
-		return nil, err
+func TestLoadFromYAMLSuccess(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	configDir := filepath.Join(tmpHome, ".config", "sensorpanel")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
 	}
 
-	return env, nil
-}
-
-func TestLoadSuccess(t *testing.T) {
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("APP_PORT", "9070")
-	t.Setenv("DATABASE_URI", "data/sensorpanel.db.sqlite3")
-	t.Setenv("APP_SHUTDOWN_TIMEOUT", "12s")
-
-	env, err := loadForTest()
-	if err != nil {
-		t.Fatalf("loadForTest returned error: %v", err)
+	configPath := filepath.Join(configDir, "conf.yaml")
+	content := []byte(`
+environment: staging
+app_port: 9999
+database_uri: /tmp/sensorpanel.sqlite3
+app_shutdown_timeout: 15s
+youtube_api_key: abc123
+`)
+	if err := os.WriteFile(configPath, content, 0o644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
 	}
 
-	if env.Environment != "development" {
-		t.Fatalf("expected AppEnv development, got %q", env.Environment)
-	}
-	if env.AppPort != 9070 {
-		t.Fatalf("expected AppPort 9070, got %d", env.AppPort)
-	}
-	if env.DatabaseURI != "data/sensorpanel.db.sqlite3" {
-		t.Fatalf("expected DatabaseURI data/sensorpanel.db.sqlite3, got %q", env.DatabaseURI)
-	}
-	if env.AppShutdownTimeout != 12*time.Second {
-		t.Fatalf("expected AppShutdownTimeout 12s, got %s", env.AppShutdownTimeout)
-	}
-}
-
-func TestLoadMissingOptionalEnv(t *testing.T) {
-	os.Unsetenv("APP_ENV")
-	os.Unsetenv("APP_PORT")
-	os.Unsetenv("DATABASE_URI")
-	os.Unsetenv("APP_SHUTDOWN_TIMEOUT")
-
-	env, err := loadForTest()
-	if err != nil {
-		t.Fatalf("expected loadForTest to succeed when optional env vars are missing: %v", err)
+	env := &Env{
+		Environment:        "development",
+		AppPort:            9070,
+		DatabaseURI:        "~/.config/sensorpanel/db.sqlite3",
+		AppShutdownTimeout: 1 * time.Second,
 	}
 
-	if env.Environment != "" {
-		t.Fatalf("expected default Environment to remain empty, got %q", env.Environment)
+	if err := loadFromYAML(env); err != nil {
+		t.Fatalf("loadFromYAML failed: %v", err)
 	}
-	if env.AppPort != 0 {
-		t.Fatalf("expected default AppPort to remain 0, got %d", env.AppPort)
+
+	if env.Environment != "staging" {
+		t.Fatalf("expected environment staging, got %q", env.Environment)
 	}
-	if env.DatabaseURI != "" {
-		t.Fatalf("expected default DatabaseURI to remain empty, got %q", env.DatabaseURI)
+	if env.AppPort != 9999 {
+		t.Fatalf("expected app_port 9999, got %d", env.AppPort)
+	}
+	if env.DatabaseURI != "/tmp/sensorpanel.sqlite3" {
+		t.Fatalf("expected database_uri /tmp/sensorpanel.sqlite3, got %q", env.DatabaseURI)
+	}
+	if env.AppShutdownTimeout != 15*time.Second {
+		t.Fatalf("expected app_shutdown_timeout 15s, got %s", env.AppShutdownTimeout)
+	}
+	if env.YouTubeAPIKey != "abc123" {
+		t.Fatalf("expected youtube_api_key abc123, got %q", env.YouTubeAPIKey)
 	}
 }
 
-func TestLoadDefaultsShutdownTimeout(t *testing.T) {
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("APP_PORT", "9070")
-	t.Setenv("DATABASE_URI", "data/sensorpanel.db.sqlite3")
-	os.Unsetenv("APP_SHUTDOWN_TIMEOUT")
+func TestLoadFromYAMLMissingFileUsesDefaults(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
 
-	env, err := loadForTest()
-	if err != nil {
-		t.Fatalf("loadForTest returned error: %v", err)
+	env := &Env{
+		Environment:        "development",
+		AppPort:            9070,
+		DatabaseURI:        "~/.config/sensorpanel/db.sqlite3",
+		AppShutdownTimeout: 1 * time.Second,
+		YouTubeAPIKey:      "",
 	}
 
-	if env.AppShutdownTimeout != 1*time.Second {
-		t.Fatalf("expected default AppShutdownTimeout 1s, got %s", env.AppShutdownTimeout)
+	if err := loadFromYAML(env); err != nil {
+		t.Fatalf("loadFromYAML should ignore missing file: %v", err)
 	}
-}
 
-func TestLoadRejectsInvalidShutdownTimeout(t *testing.T) {
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("APP_PORT", "9070")
-	t.Setenv("DATABASE_URI", "data/sensorpanel.db.sqlite3")
-	t.Setenv("APP_SHUTDOWN_TIMEOUT", "abc")
-
-	if _, err := loadForTest(); err == nil {
-		t.Fatal("expected loadForTest to fail when APP_SHUTDOWN_TIMEOUT is invalid")
+	if env.Environment != "development" || env.AppPort != 9070 || env.DatabaseURI == "" {
+		t.Fatalf("expected defaults to remain unchanged: %+v", env)
 	}
 }
 
-func TestLoadRejectsNonPositiveShutdownTimeout(t *testing.T) {
-	t.Setenv("APP_ENV", "development")
-	t.Setenv("APP_PORT", "9070")
-	t.Setenv("DATABASE_URI", "data/sensorpanel.db.sqlite3")
-	t.Setenv("APP_SHUTDOWN_TIMEOUT", "0s")
-
-	if _, err := loadForTest(); err == nil {
-		t.Fatal("expected loadForTest to fail when APP_SHUTDOWN_TIMEOUT is not positive")
+func TestValidateRejectsInvalidValues(t *testing.T) {
+	env := &Env{Environment: "qa", AppPort: 0, AppShutdownTimeout: 0}
+	if err := validate(env); err == nil {
+		t.Fatal("expected validate to fail for invalid values")
 	}
 }

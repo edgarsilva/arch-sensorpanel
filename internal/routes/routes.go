@@ -36,6 +36,14 @@ func PublicRoutes(s *server.Server) {
 		return c.Type("html").Send(indexHTML)
 	})
 
+	s.Get("/isolation", func(c fiber.Ctx) error {
+		indexHTML, err := fs.ReadFile(s.PublicFS, "index_isolation.html")
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "index_isolation.html not found")
+		}
+		return c.Type("html").Send(indexHTML)
+	})
+
 	s.Get("/telemetry", func(c fiber.Ctx) error {
 		telemetryHTML, err := fs.ReadFile(s.PublicFS, "telemetry.html")
 		if err != nil {

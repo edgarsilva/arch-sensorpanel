@@ -66,7 +66,7 @@
                 <legend class="fieldset-legend">Infinite video playback</legend>
                 <label class="label cursor-pointer justify-start gap-3">
                   <input id="infinite_video_playback" type="checkbox" class="toggle toggle-primary" />
-                  <span class="label-text">Loops video playback so videos appear go on forever, infinite playback.</span>
+                  <span class="label-text">Loops the current video indefinitely. Works for both single videos and playlist entries.</span>
                 </label>
               </fieldset>
 
@@ -283,9 +283,12 @@
       }
 
       function toPayload() {
+        const mediaKind = document.getElementById("media_kind").value
+        const mediaType = mediaKind === "playlist" ? "playlist" : "video"
         return {
           config: {
             name: document.getElementById("config_name").value.trim(),
+            media_type: mediaType,
             layout: {
               name: document.getElementById("layout_name").value,
               overlay_layout: document.getElementById("overlay_layout").value,
@@ -306,7 +309,7 @@
             },
             media_sources: [
               {
-                kind: document.getElementById("media_kind").value,
+                kind: mediaKind,
                 url: document.getElementById("media_url").value.trim(),
                 label: "",
               },
@@ -410,7 +413,13 @@
         bindAutosaveField("metrics_scale_pct", "metrics_scale_pct", (input) => Number(input.value || 100), "input")
         bindAutosaveField("metrics_offset_x", "metrics_offset_x", (input) => Number(input.value || 0), "input")
         bindAutosaveField("metrics_offset_y", "metrics_offset_y", (input) => Number(input.value || 0), "input")
-        bindAutosaveField("media_kind", "media_kind", (input) => input.value, "change")
+        const mediaKind = document.getElementById("media_kind")
+        if (mediaKind) {
+          mediaKind.addEventListener("change", () => {
+            queueFieldAutosave("media_kind", mediaKind.value)
+            queueFieldAutosave("media_type", mediaKind.value === "playlist" ? "playlist" : "video")
+          })
+        }
         bindAutosaveField("media_url", "media_url", (input) => input.value.trim(), "input")
       }
 
@@ -432,11 +441,11 @@
         for (const item of items) {
           const row = document.createElement("li")
           row.className = item.is_current
-            ? "list-row rounded-none flex flex-nowrap items-start gap-3 bg-success/10"
-            : "list-row rounded-none flex flex-nowrap items-start gap-3"
+            ? "list-row rounded-none bg-success/10"
+            : "list-row rounded-none"
           const currentBadge = item.is_current ? '<span class="badge badge-success badge-sm whitespace-nowrap">current</span>' : '<span class="badge badge-ghost badge-sm whitespace-nowrap">history</span>'
           const configName = (item.config?.name || "Untitled").trim()
-          row.innerHTML = `<div class="min-w-0 flex-1"><div class="font-semibold leading-snug break-words [overflow-wrap:anywhere]">${configName}</div><div class="text-xs uppercase font-semibold opacity-60">v${item.version}</div></div><div class="shrink-0 flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap">${currentBadge}<a class="btn btn-xs btn-ghost whitespace-nowrap" href="/settings/${item.id}/edit">edit</a></div>`
+          row.innerHTML = `<div class="w-full min-w-0"><div class="font-semibold leading-snug whitespace-normal break-words" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${configName}</div><div class="mt-1 flex items-center gap-2">${currentBadge}<span class="badge badge-ghost badge-sm whitespace-nowrap">v${item.version}</span><a class="btn btn-xs btn-ghost whitespace-nowrap ml-auto" href="/settings/${item.id}/edit">edit</a></div></div>`
           listEl.appendChild(row)
         }
       }
@@ -468,11 +477,17 @@
         document.getElementById("metrics_offset_x").value = item.config?.layout?.metrics_offset_x || 0
         document.getElementById("metrics_offset_y").value = item.config?.layout?.metrics_offset_y || 0
         syncTuningValueLabels()
+        const mediaType = String(item.config?.media_type || "").toLowerCase()
         const firstMedia = Array.isArray(item.config?.media_sources) ? item.config.media_sources[0] : null
         if (firstMedia) {
-          document.getElementById("media_kind").value = firstMedia.kind || "youtube"
+          const firstKind = String(firstMedia.kind || "").toLowerCase()
+          document.getElementById("media_kind").value = mediaType === "playlist" ? "playlist" : (firstKind || "youtube")
           document.getElementById("media_url").value = firstMedia.url || ""
+          return
         }
+
+        document.getElementById("media_kind").value = mediaType === "playlist" ? "playlist" : "youtube"
+        document.getElementById("media_url").value = ""
       }
 
       async function loadEdit() {
@@ -556,6 +571,7 @@
           ["metrics_scale_pct", String(cfg.layout.metrics_scale_pct || 100)],
           ["metrics_offset_x", String(cfg.layout.metrics_offset_x || 0)],
           ["metrics_offset_y", String(cfg.layout.metrics_offset_y || 0)],
+          ["media_type", cfg.media_type || (((cfg.media_sources[0] && cfg.media_sources[0].kind) || "") === "playlist" ? "playlist" : "video")],
           ["media_kind", (cfg.media_sources[0] && cfg.media_sources[0].kind) || ""],
           ["media_url", (cfg.media_sources[0] && cfg.media_sources[0].url) || ""],
           ["media_label", ""],

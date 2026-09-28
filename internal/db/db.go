@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-const DefaultDatabaseURI = "~/.config/sensorpanel.db.sqlite3"
+const DefaultDatabaseURI = "~/.config/sensorpanel/db.sqlite3"
 
 const defaultSQLitePragmaOpts = "?mode=rwc" +
 	"&_pragma=journal_mode(WAL)" +

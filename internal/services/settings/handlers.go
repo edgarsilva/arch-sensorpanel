@@ -33,6 +33,7 @@ type createSettingsInput struct {
 	MetricsOffsetX         string                `form:"metrics_offset_x"`
 	MetricsOffsetY         string                `form:"metrics_offset_y"`
 	MediaKind              string                `form:"media_kind"`
+	MediaType              string                `form:"media_type"`
 	MediaURL               string                `form:"media_url"`
 	MediaLabel             string                `form:"media_label"`
 }
@@ -401,7 +402,8 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 	}
 
 	in.Config = models.SettingsConfig{
-		Name: strings.TrimSpace(in.ConfigName),
+		Name:      strings.TrimSpace(in.ConfigName),
+		MediaType: deriveMediaType(strings.TrimSpace(in.MediaType), strings.TrimSpace(in.MediaKind)),
 		Layout: models.SettingsLayout{
 			Name:                   strings.TrimSpace(in.LayoutName),
 			OverlayLayout:          strings.TrimSpace(in.OverlayLayout),
@@ -425,6 +427,10 @@ func parseSettingsInput(c fiber.Ctx) (createSettingsInput, error) {
 			URL:   strings.TrimSpace(in.MediaURL),
 			Label: strings.TrimSpace(in.MediaLabel),
 		}},
+	}
+
+	if in.Config.MediaSources[0].Kind == "" {
+		in.Config.MediaSources[0].Kind = in.Config.MediaType
 	}
 
 	return in, nil
@@ -489,6 +495,18 @@ func applyFieldPatch(cfg *models.SettingsConfig, field string, value any) error 
 		cfg.Layout.MetricsOffsetY = toInt(value)
 	case "media_kind":
 		cfg.MediaSources[0].Kind = strings.TrimSpace(toString(value))
+		cfg.MediaType = deriveMediaType(cfg.MediaType, cfg.MediaSources[0].Kind)
+		if cfg.MediaType == "playlist" && len(cfg.MediaSources) > 1 {
+			cfg.MediaSources = cfg.MediaSources[:1]
+		}
+	case "media_type":
+		cfg.MediaType = deriveMediaType(toString(value), "")
+		if strings.TrimSpace(cfg.MediaSources[0].Kind) == "" {
+			cfg.MediaSources[0].Kind = cfg.MediaType
+		}
+		if cfg.MediaType == "playlist" && len(cfg.MediaSources) > 1 {
+			cfg.MediaSources = cfg.MediaSources[:1]
+		}
 	case "media_url":
 		cfg.MediaSources[0].URL = strings.TrimSpace(toString(value))
 	default:
@@ -575,4 +593,21 @@ func toBool(value any) bool {
 	default:
 		return false
 	}
+}
+
+func deriveMediaType(rawType string, rawKind string) string {
+	mediaType := strings.ToLower(strings.TrimSpace(rawType))
+	if mediaType == "playlist" {
+		return "playlist"
+	}
+	if mediaType == "video" || mediaType == "youtube" {
+		return "video"
+	}
+
+	kind := strings.ToLower(strings.TrimSpace(rawKind))
+	if kind == "playlist" {
+		return "playlist"
+	}
+
+	return "video"
 }
