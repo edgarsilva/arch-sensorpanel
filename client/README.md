@@ -23,6 +23,17 @@ SENSORPANEL_MPV_LOG=/tmp/mpv.log sensorpanel-client   # verbose mpv log
 - Rust 1.92 or newer. `rust-toolchain.toml` pins 1.97.1, because Slint 1.18 needs 1.92+.
 - The Wayland app id is `sensorpanel-client`.
 
+## Controls
+
+These work only when the panel has focus, e.g. when the pointer is over it:
+
+| key | action |
+|---|---|
+| F5 | re-fetch settings and reload the current video |
+| ← / → | previous / next video (same as the on-screen buttons, wrapping at both ends) |
+
+To fully restart the client, use the Hyprland launcher (`SUPER+ALT+P`).
+
 ## What maps to what
 
 | Web panel (`public/js/panel.js`) | Native client |

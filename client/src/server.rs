@@ -66,6 +66,10 @@ impl Server {
         Self { base: base.trim_end_matches('/').to_string(), agent }
     }
 
+    pub fn base(&self) -> &str {
+        &self.base
+    }
+
     pub fn ws_url(&self, path: &str) -> String {
         let base = self
             .base
@@ -82,6 +86,15 @@ impl Server {
             .body_mut()
             .read_json()
             .context("decode current settings")
+    }
+
+    /// Download `url` to `path` (via a temp file, so a partial download never looks cached).
+    pub fn download(&self, url: &str, path: &std::path::Path) -> Result<()> {
+        let bytes = self.agent.get(url).call().with_context(|| format!("GET {url}"))?.body_mut().read_to_vec()?;
+        let tmp = path.with_extension("part");
+        std::fs::write(&tmp, bytes)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
     }
 
     /// Same contract as `persistCurrentPlaylistVideo()` in panel.js: saves the playing video

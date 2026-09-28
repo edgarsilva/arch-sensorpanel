@@ -3,7 +3,9 @@
 
 mod player;
 mod server;
+mod status;
 mod telemetry;
+mod title;
 mod theme;
 
 use anyhow::{anyhow, Result};
@@ -56,6 +58,7 @@ fn main() -> Result<()> {
     let ui = Panel::new()?;
     let player = Player::new(server.clone())?;
 
+    player.set_status_handler(status::handler(server.clone(), ui.as_weak()));
     install_video_underlay(&ui, player.mpv)?;
     thread::spawn({
         let player = player.clone();
@@ -86,13 +89,24 @@ fn main() -> Result<()> {
 
     let reload = {
         let (server, player, weak) = (server.clone(), player.clone(), weak.clone());
-        move || load_settings(&server, &player, &weak)
+        move |force: bool| load_settings(&server, &player, &weak, force)
     };
     let initial = reload.clone();
-    thread::spawn(initial);
+    thread::spawn(move || initial(false));
+    ui.on_reload({
+        let (reload, weak) = (reload.clone(), weak.clone());
+        move || {
+            eprintln!("reload: F5");
+            if let Some(ui) = weak.upgrade() {
+                status::toast(&ui, "Reloading…");
+            }
+            let reload = reload.clone();
+            thread::spawn(move || reload(true));
+        }
+    });
     telemetry::spawn_settings_watch(server.ws_url("/settings/ws"), move |version| {
         eprintln!("settings: changed (version {version}), re-applying");
-        reload();
+        reload(false);
     });
 
     ui.run()?;
@@ -148,17 +162,20 @@ fn install_video_underlay(ui: &Panel, mpv: &'static libmpv2::Mpv) -> Result<()> 
 }
 
 /// Fetch current settings (retrying until the server is up) and apply them to mpv and the UI.
-fn load_settings(server: &Server, player: &Arc<Player>, weak: &slint::Weak<Panel>) {
+/// `force` reloads the playlist even if it's unchanged (F5).
+fn load_settings(server: &Server, player: &Arc<Player>, weak: &slint::Weak<Panel>, force: bool) {
     let settings = loop {
         match server.current_settings() {
             Ok(s) => break s,
             Err(e) => {
                 eprintln!("settings: {e:#}; retrying");
+                let detail = server.base().to_string();
+                let _ = weak.upgrade_in_event_loop(move |ui| status::starting(&ui, "Waiting for sensorpanel server", &detail));
                 thread::sleep(Duration::from_secs(2));
             }
         }
     };
-    player.apply(&settings.config);
+    player.apply(&settings.config, force);
     let config = settings.config;
     let _ = weak.upgrade_in_event_loop(move |ui| apply_layout(&ui, &config));
 }

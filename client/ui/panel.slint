@@ -212,13 +212,54 @@ component PillButton inherits TouchArea {
     mouse-cursor: pointer;
     Rectangle {
         border-radius: self.height / 2;
-        background: root.has-hover ? Theme.base-content.transparentize(85%) : transparent;
+        background: root.pressed ? Theme.base-content.transparentize(65%)
+            : root.has-hover ? Theme.base-content.transparentize(85%)
+            : transparent;
+        animate background { duration: 120ms; }
     }
     Image {
         source: root.icon;
         colorize: Theme.base-content.transparentize(20%);
-        width: 14px;
-        height: 14px;
+        width: root.pressed ? 12px : 14px;
+        height: self.width;
+        animate width { duration: 80ms; }
+    }
+}
+
+// Indeterminate spinner: a 90° arc that rotates once a second.
+component Spinner inherits Rectangle {
+    in property <length> size: 36px;
+    in property <length> thickness: 4px;
+    in property <color> tint: white;
+    property <float> r: 50 - (thickness / size) * 50;
+    property <angle> a: mod(animation-tick() / 1s, 1) * 360deg;
+    width: size;
+    height: size;
+
+    Rectangle {
+        border-radius: self.width / 2;
+        border-width: root.thickness;
+        border-color: root.tint.transparentize(80%);
+    }
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: root.tint;
+        stroke-width: root.thickness;
+        stroke-line-cap: round;
+        MoveTo {
+            x: 50 + root.r * Math.sin(root.a);
+            y: 50 - root.r * Math.cos(root.a);
+        }
+        ArcTo {
+            x: 50 + root.r * Math.sin(root.a + 100deg);
+            y: 50 - root.r * Math.cos(root.a + 100deg);
+            radius-x: root.r;
+            radius-y: root.r;
+            sweep: true;
+        }
     }
 }
 
@@ -246,6 +287,49 @@ export component Panel inherits Window {
     in property <bool> connected: false;
     in property <bool> show-controls: false;
     callback playlist-step(int);
+    callback reload();
+
+    // Player status: "" (playing) | starting | loading | buffering | retrying
+    in property <string> status-kind: "starting";
+    in property <string> status-title: "Starting…";
+    in property <string> status-detail;
+    // Thumbnail of the entry being opened, shown instead of a black screen.
+    in property <image> poster;
+    in property <bool> show-poster: false;
+    // Short-lived message (now playing, skipped video, reloading).
+    in property <string> toast-text;
+    in property <bool> toast-visible: false;
+
+    forward-focus: keys;
+    keys := FocusScope {
+        // While the panel has focus: F5 re-fetches settings and reloads the current video,
+        // ←/→ step through the playlist like the prev/next buttons.
+        key-pressed(event) => {
+            if event.text == Key.F5 {
+                root.reload();
+                return accept;
+            }
+            if root.show-controls && event.text == Key.LeftArrow {
+                root.playlist-step(-1);
+                return accept;
+            }
+            if root.show-controls && event.text == Key.RightArrow {
+                root.playlist-step(1);
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Poster: covers the (black) video underlay while an entry is opening, then fades out.
+    Image {
+        width: 100%;
+        height: 100%;
+        source: root.poster;
+        image-fit: ImageFit.cover;
+        opacity: root.show-poster ? 1 : 0;
+        animate opacity { duration: 450ms; easing: ease-in-out; }
+    }
 
     // Telemetry
     in property <float> cpu-util;
@@ -360,6 +444,93 @@ export component Panel inherits Window {
                     desc: root.gpu-desc;
                     desc-pct: root.vram-pct;
                 }
+            }
+        }
+    }
+
+    // Free area beside the metrics, where the loading card and toast are centred.
+    property <length> free-x: root.position == "left" ? slot.x + slot.width
+        : 0;
+    property <length> free-w: root.position == "left" ? root.width - self.free-x
+        : root.position == "right" ? slot.x
+        : root.width;
+
+    if root.status-kind != "": Rectangle {
+        property <length> w: min(card.preferred-width, root.free-w - 48px);
+        x: root.free-x + (root.free-w - self.w) / 2;
+        y: (root.height - self.height) / 2;
+        width: self.w;
+        height: card.preferred-height;
+        border-radius: 18px;
+        background: #000000a6;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000066;
+
+        card := HorizontalLayout {
+            padding: 20px;
+            padding-right: 28px;
+            spacing: 18px;
+            VerticalLayout {
+                alignment: center;
+                Spinner {
+                    size: 40px;
+                    tint: white;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: root.status-kind == "buffering" ? "Buffering"
+                        : root.status-kind == "retrying" ? "Can't load videos"
+                        : root.status-kind == "starting" ? "Starting"
+                        : "Loading";
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #ffffffa6;
+                    letter-spacing: 1px;
+                }
+                Text {
+                    text: root.status-title;
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: white;
+                    overflow: elide;
+                    max-width: 560px;
+                }
+                if root.status-detail != "": Text {
+                    text: root.status-detail;
+                    font-size: 14px;
+                    color: #ffffffb3;
+                }
+            }
+        }
+    }
+
+    // Toast (bottom centre of the free area).
+    Rectangle {
+        property <length> w: min(toast.preferred-width, root.free-w - 48px);
+        x: root.free-x + (root.free-w - self.w) / 2;
+        y: root.height - self.height - (root.toast-visible ? 18px : 6px);
+        width: self.w;
+        height: toast.preferred-height;
+        border-radius: self.height / 2;
+        background: #000000a6;
+        opacity: root.toast-visible ? 1 : 0;
+        animate opacity, y { duration: 250ms; easing: ease-out; }
+
+        toast := HorizontalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            Text {
+                text: root.toast-text;
+                font-size: 15px;
+                font-weight: 500;
+                color: white;
+                overflow: elide;
+                vertical-alignment: center;
             }
         }
     }

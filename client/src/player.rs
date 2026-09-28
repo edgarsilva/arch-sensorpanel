@@ -7,10 +7,11 @@ use libmpv2::events::{Event, PropertyData};
 use libmpv2::{Format, Mpv};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const DEFAULT_VIDEO_ID: &str = "AKfsikEXZHM";
 const IDLE_PROP_ID: u64 = 1;
+const CACHE_PROP_ID: u64 = 2;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
@@ -81,13 +82,20 @@ pub fn build_entries(config: &Config) -> (Vec<Entry>, usize) {
         return (vec![entry], 0);
     }
 
+    let slot_id = config.media_sources.first().and_then(|s| extract_video_id(&s.url));
     let mut entries: Vec<Entry> = Vec::new();
-    for source in &config.media_sources {
+    for (i, source) in config.media_sources.iter().enumerate() {
         let Some(video_id) = extract_video_id(&source.url) else { continue };
-        if entries.iter().any(|e| e.video_id == video_id) {
+        let label = source.label.trim().to_string();
+        if let Some(existing) = entries.iter_mut().find(|e| e.video_id == video_id) {
+            // media_sources[0] is the progress slot: the server rewrites its URL on every advance
+            // but keeps the old label, so the playlist's own entry has the right title.
+            if i > 0 && !label.is_empty() && slot_id.as_deref() == Some(existing.video_id.as_str()) {
+                existing.label = label;
+            }
             continue;
         }
-        entries.push(Entry { video_id, url: source.url.trim().to_string(), label: source.label.trim().to_string() });
+        entries.push(Entry { video_id, url: source.url.trim().to_string(), label });
     }
     if entries.is_empty() {
         return build_entries(&Config { media_type: "video".into(), ..config.clone() });
@@ -125,18 +133,51 @@ pub fn video_align(layout: &Layout) -> (f64, f64) {
     }
 }
 
+/// What the player is doing, for the loading overlay and toasts.
+#[derive(Debug, Clone)]
+pub enum Status {
+    /// Opening an entry: yt-dlp resolve, connect, first frames. `index` is 0-based.
+    Loading { index: usize, total: usize, entry: Entry },
+    /// The first frame of the entry that was loading is on screen.
+    Playing { index: usize, total: usize, entry: Entry },
+    /// Playback stalled waiting for the network (`true`) or recovered (`false`).
+    Buffering(bool),
+    /// An entry failed to load; mpv moves on to the next one.
+    Failed { entry: Option<Entry> },
+    /// Every entry failed; the playlist is retried after `secs`.
+    Retrying { secs: u64 },
+}
+
+type StatusFn = Box<dyn Fn(Status) + Send + Sync>;
+
 #[derive(Default)]
 struct State {
     entries: Vec<Entry>,
     start: usize,
     signature: String,
     last_persisted: String,
+    /// Entry currently being opened, and when (for startup timing logs).
+    loading: Option<(usize, Instant)>,
+    /// Load errors since the last successful start; >0 means an idle mpv is a real failure
+    /// rather than the transient idle caused by our own `stop` in `load_playlist`.
+    failures: usize,
+    /// Direction of the last navigation (-1 = prev). mpv always skips a broken entry
+    /// forwards, so going back past one needs our help.
+    backwards: bool,
+}
+
+impl State {
+    fn entry(&self, pos: i64) -> Option<(usize, Entry)> {
+        let index = usize::try_from(pos).ok()?;
+        self.entries.get(index).map(|e| (index, e.clone()))
+    }
 }
 
 pub struct Player {
     pub mpv: &'static Mpv,
     server: Server,
     state: Mutex<State>,
+    on_status: Mutex<Option<StatusFn>>,
 }
 
 impl Player {
@@ -153,6 +194,8 @@ impl Player {
             // fills whatever it's given. No back-buffer: we never seek backwards (loop = reopen).
             init.set_option("demuxer-max-bytes", "32MiB")?;
             init.set_option("demuxer-max-back-bytes", "0")?;
+            // Open the next playlist entry while the current one plays, so next is quick.
+            init.set_option("prefetch-playlist", "yes")?;
             // Don't block the UI thread in render() waiting for the frame's display time.
             init.set_option("video-timing-offset", "0")?;
             init.set_option("idle", "yes")?;
@@ -164,11 +207,22 @@ impl Player {
         })
         .map_err(|e| anyhow!("init mpv: {e}"))?;
         let mpv: &'static Mpv = Box::leak(Box::new(mpv));
-        Ok(Arc::new(Self { mpv, server, state: Mutex::new(State::default()) }))
+        Ok(Arc::new(Self { mpv, server, state: Mutex::new(State::default()), on_status: Mutex::new(None) }))
     }
 
-    /// Apply settings: always re-applies layout, reloads the playlist only when it changed.
-    pub fn apply(&self, config: &Config) {
+    pub fn set_status_handler(&self, f: impl Fn(Status) + Send + Sync + 'static) {
+        *self.on_status.lock().unwrap() = Some(Box::new(f));
+    }
+
+    fn emit(&self, status: Status) {
+        if let Some(f) = self.on_status.lock().unwrap().as_ref() {
+            f(status);
+        }
+    }
+
+    /// Apply settings: always re-applies layout, reloads the playlist only when it changed
+    /// (or unconditionally with `force`, used by the F5 reload).
+    pub fn apply(&self, config: &Config, force: bool) {
         let layout = &config.layout;
         let set = |name: &str, value: &str| {
             if let Err(e) = self.mpv.set_property(name, value) {
@@ -189,7 +243,7 @@ impl Player {
 
         let signature = playlist_signature(config);
         let mut state = self.state.lock().unwrap();
-        if state.signature == signature && !state.entries.is_empty() {
+        if !force && state.signature == signature && !state.entries.is_empty() {
             return;
         }
         let (entries, start) = build_entries(config);
@@ -197,6 +251,7 @@ impl Player {
         state.entries = entries;
         state.start = start;
         state.signature = signature;
+        state.failures = 0;
         state.last_persisted = config.media_sources.first().map(|s| s.url.clone()).unwrap_or_default();
         self.load_playlist(&state);
     }
@@ -213,35 +268,93 @@ impl Player {
         }
     }
 
+    /// Step through the playlist, wrapping at both ends. Done by index rather than with
+    /// playlist-prev/next, which stop at the ends when loop-playlist is off (infinite mode).
     pub fn next(&self, delta: i64) {
-        let cmd = if delta < 0 { "playlist-prev" } else { "playlist-next" };
-        if let Err(e) = self.mpv.command(cmd, &["force"]) {
-            eprintln!("mpv: {cmd}: {e}");
+        let mut state = self.state.lock().unwrap();
+        let total = state.entries.len() as i64;
+        if total == 0 {
+            return;
         }
+        state.backwards = delta < 0;
+        let pos = self.mpv.get_property::<i64>("playlist-pos").unwrap_or(state.start as i64);
+        drop(state);
+        self.play_index((pos + delta).rem_euclid(total));
+    }
+
+    fn play_index(&self, index: i64) {
+        if let Err(e) = self.mpv.set_property("playlist-pos", index) {
+            eprintln!("mpv: playlist-pos={index}: {e}");
+        }
+    }
+
+    fn on_start_file(&self) {
+        let pos = self.mpv.get_property::<i64>("playlist-pos").unwrap_or(-1);
+        let mut state = self.state.lock().unwrap();
+        let Some((index, entry)) = state.entry(pos) else { return };
+        state.loading = Some((index, Instant::now()));
+        let total = state.entries.len();
+        drop(state);
+        eprintln!("player: start #{index} {} {:?}", entry.video_id, entry.label);
+        self.emit(Status::Loading { index, total, entry });
     }
 
     fn on_file_loaded(&self) {
         let pos = self.mpv.get_property::<i64>("playlist-pos").unwrap_or(-1);
         let hwdec = self.mpv.get_property::<String>("hwdec-current").unwrap_or_default();
-        let entry = {
+        let (persist, since) = {
             let mut state = self.state.lock().unwrap();
-            let Some(entry) = usize::try_from(pos).ok().and_then(|p| state.entries.get(p)).cloned() else { return };
-            state.start = pos as usize;
+            let Some((index, entry)) = state.entry(pos) else { return };
+            state.start = index;
+            let since = state.loading.map(|(_, t)| t.elapsed());
             if state.last_persisted == entry.url {
-                None
+                (None, since)
             } else {
                 state.last_persisted = entry.url.clone();
-                Some(entry)
+                (Some(entry), since)
             }
         };
-        eprintln!("player: playing #{pos} hwdec={hwdec:?}");
-        if let Some(entry) = entry {
+        eprintln!("player: file loaded #{pos} after {since:.1?} hwdec={hwdec:?}");
+        if let Some(entry) = persist {
             let server = self.server.clone();
             thread::spawn(move || {
                 if let Err(e) = server.persist_media_url(&entry.url) {
                     eprintln!("player: persist progress: {e:#}");
                 }
             });
+        }
+    }
+
+    /// First frame after a file start (also fires after seeks/loops, which are ignored).
+    fn on_playback_restart(&self) {
+        let mut state = self.state.lock().unwrap();
+        let Some((index, since)) = state.loading.take() else { return };
+        state.failures = 0;
+        state.backwards = false;
+        let Some(entry) = state.entries.get(index).cloned() else { return };
+        let total = state.entries.len();
+        drop(state);
+        eprintln!("player: first frame #{index} after {:.1?}", since.elapsed());
+        self.emit(Status::Playing { index, total, entry });
+    }
+
+    fn on_load_error(&self, err: &libmpv2::Error) {
+        let mut state = self.state.lock().unwrap();
+        state.failures += 1;
+        let loading = state.loading.take();
+        let entry = loading.and_then(|(i, _)| state.entries.get(i).cloned());
+        let total = state.entries.len();
+        // mpv moves on to the *next* entry after a failure; when the user was going back, keep
+        // going back instead (unless everything failed, which the idle retry handles).
+        let back_to = match loading {
+            Some((i, _)) if state.backwards && state.failures < total => Some((i as i64 - 1).rem_euclid(total as i64)),
+            _ => None,
+        };
+        drop(state);
+        eprintln!("player: load failed ({err}): {:?}", entry.as_ref().map(|e| &e.video_id));
+        self.emit(Status::Failed { entry });
+        if let Some(index) = back_to {
+            self.play_index(index);
         }
     }
 
@@ -253,32 +366,43 @@ impl Player {
         };
         let _ = client.disable_deprecated_events();
         let _ = client.observe_property("idle-active", Format::Flag, IDLE_PROP_ID);
+        let _ = client.observe_property("paused-for-cache", Format::Flag, CACHE_PROP_ID);
 
         let mut backoff = Duration::from_secs(5);
         loop {
             match client.wait_event(-1.0) {
+                Some(Ok(Event::StartFile)) => self.on_start_file(),
                 Some(Ok(Event::FileLoaded)) => {
                     backoff = Duration::from_secs(5);
                     self.on_file_loaded();
                 }
+                Some(Ok(Event::PlaybackRestart)) => self.on_playback_restart(),
                 Some(Ok(Event::VideoReconfig)) => {
                     let hwdec = self.mpv.get_property::<String>("hwdec-current").unwrap_or_default();
                     eprintln!("player: video reconfig hwdec={hwdec:?}");
                 }
-                // Everything failed (yt-dlp/network): mpv went idle. Retry with backoff.
+                Some(Ok(Event::PropertyChange { reply_userdata: CACHE_PROP_ID, change: PropertyData::Flag(stalled), .. })) => {
+                    self.emit(Status::Buffering(stalled));
+                }
+                // Idle after load errors means every entry failed (yt-dlp/network): retry with
+                // backoff. Idle without errors is just our own `stop` while reloading.
                 Some(Ok(Event::PropertyChange { reply_userdata: IDLE_PROP_ID, change: PropertyData::Flag(true), .. })) => {
                     let state = self.state.lock().unwrap();
-                    if state.entries.is_empty() {
+                    if state.entries.is_empty() || state.failures == 0 {
                         continue;
                     }
                     drop(state);
-                    eprintln!("player: idle, retrying in {backoff:?}");
+                    eprintln!("player: all entries failed, retrying in {backoff:?}");
+                    self.emit(Status::Retrying { secs: backoff.as_secs() });
                     thread::sleep(backoff);
                     backoff = (backoff * 2).min(Duration::from_secs(120));
-                    self.load_playlist(&self.state.lock().unwrap());
+                    let mut state = self.state.lock().unwrap();
+                    state.failures = 0;
+                    self.load_playlist(&state);
                 }
                 Some(Ok(Event::Shutdown)) => return,
-                Some(Err(e)) => eprintln!("mpv: event error: {e}"),
+                // wait_event reports a failed END_FILE as an error.
+                Some(Err(e)) => self.on_load_error(&e),
                 _ => {}
             }
         }
@@ -321,6 +445,22 @@ mod tests {
         assert_eq!(ids, ["CCCCCCCCCCC", "AAAAAAAAAAA", "BBBBBBBBBBB"]);
         assert_eq!(start, 0);
         assert_eq!(entries[1].stream_url(), "https://www.youtube.com/watch?v=AAAAAAAAAAA");
+    }
+
+    #[test]
+    fn progress_slot_takes_label_from_playlist_entry() {
+        let config = Config {
+            media_type: "playlist".into(),
+            media_sources: vec![
+                MediaSource { url: "BBBBBBBBBBB".into(), label: "stale title of A".into() },
+                MediaSource { url: "AAAAAAAAAAA".into(), label: "A".into() },
+                MediaSource { url: "BBBBBBBBBBB".into(), label: "B".into() },
+            ],
+            ..Default::default()
+        };
+        let (entries, start) = build_entries(&config);
+        assert_eq!((entries[0].video_id.as_str(), entries[0].label.as_str(), start), ("BBBBBBBBBBB", "B", 0));
+        assert_eq!(entries[1].label, "A");
     }
 
     #[test]
