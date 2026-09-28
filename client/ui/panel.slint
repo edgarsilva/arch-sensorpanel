@@ -1,0 +1,438 @@
+// Sensor panel overlay. A port of the DaisyUI overlay in public/index.html, drawn with a
+// transparent window background so the libmpv video underlay shows through.
+
+// DaisyUI theme tokens; set from Rust (src/theme.rs) based on `layout.theme`.
+export global Theme {
+    in-out property <color> primary: #0d0d0d;
+    in-out property <color> secondary: #1a1919;
+    in-out property <color> base-200: #f2f2f2;
+    in-out property <color> base-content: #000000;
+    in-out property <color> success: #00c38a;
+}
+
+// daisyUI `radial-progress`: translucent disc with a round-capped arc and a centred label.
+component RadialGauge inherits Rectangle {
+    in property <float> value; // 0..100
+    in property <string> label;
+    in property <float> s: 1;
+    property <length> size: 83.2px * s;
+    property <length> thickness: 6px * s;
+    property <float> shown: clamp(value, 0, 100);
+    animate shown { duration: 700ms; easing: ease-out; }
+    // Radius in viewbox units (0..100), inset so the stroke stays inside the box.
+    property <float> r: 50 - (thickness / size) * 50;
+    property <angle> sweep-angle: min(shown, 99.99) * 3.6deg;
+
+    width: size;
+    height: size;
+
+    Rectangle {
+        border-radius: self.width / 2;
+        background: Theme.secondary.transparentize(70%);
+    }
+
+    if shown > 0.3: Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        stroke: Theme.primary;
+        stroke-width: root.thickness;
+        stroke-line-cap: round;
+        MoveTo { x: 50; y: 50 - root.r; }
+        ArcTo {
+            x: 50 + root.r * Math.sin(root.sweep-angle);
+            y: 50 - root.r * Math.cos(root.sweep-angle);
+            radius-x: root.r;
+            radius-y: root.r;
+            large-arc: root.shown > 50;
+            sweep: true;
+        }
+    }
+
+    Text {
+        text: root.label;
+        font-size: 18px * root.s;
+        font-weight: 600;
+        color: Theme.base-content.transparentize(20%);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// daisyUI `progress` (h-1, w-48).
+component Bar inherits Rectangle {
+    in property <float> value;
+    in property <float> max: 100;
+    in property <color> fill: Theme.primary;
+    in property <float> s: 1;
+    property <float> shown: clamp(value / max, 0, 1);
+    animate shown { duration: 500ms; easing: ease-out; }
+
+    width: 192px * s;
+    height: 4px * s;
+    border-radius: self.height / 2;
+    background: Theme.base-content.transparentize(80%);
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        width: parent.width * root.shown;
+        border-radius: parent.border-radius;
+        background: root.fill;
+        animate background { duration: 300ms; }
+    }
+}
+
+// Radial gauge + daisyUI `stat` block (title, big value with unit, two bars, icon).
+component StatBlock inherits HorizontalLayout {
+    in property <float> s: 1;
+    in property <float> util;
+    in property <string> title;
+    in property <string> value;
+    in property <string> value-note;
+    in property <length> value-note-size: 16px;
+    in property <float> temp;
+    in property <float> temp-max;
+    in property <color> temp-color;
+    in property <string> desc;
+    in property <float> desc-pct;
+    in property <image> icon;
+    in property <length> gauge-gap: 4px;
+    in property <length> icon-pad-left: 16px;
+
+    alignment: start;
+    spacing: gauge-gap * s;
+
+    VerticalLayout {
+        alignment: center;
+        RadialGauge {
+            value: root.util;
+            label: round(root.util) + "%";
+            s: root.s;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 24px * root.s;
+        padding-right: 24px * root.s;
+        padding-top: 16px * root.s;
+        padding-bottom: 16px * root.s;
+        spacing: 8px * root.s;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px * root.s;
+
+            Text {
+                text: root.title;
+                font-size: 18px * root.s;
+                font-weight: 600;
+                color: Theme.base-content.transparentize(40%);
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 4px * root.s;
+                Text {
+                    text: root.value;
+                    font-size: 36px * root.s;
+                    font-weight: 800;
+                    color: Theme.base-content;
+                    vertical-alignment: top;
+                }
+                Text {
+                    text: "°C";
+                    font-size: 18px * root.s;
+                    color: Theme.base-content;
+                    vertical-alignment: top;
+                }
+                Text {
+                    text: root.value-note;
+                    font-size: root.value-note-size * root.s;
+                    color: Theme.base-content.transparentize(35%);
+                    vertical-alignment: top;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 0;
+                padding-top: 4px * root.s;
+                Bar {
+                    value: root.temp;
+                    max: root.temp-max;
+                    fill: root.temp-color;
+                    s: root.s;
+                }
+                Rectangle { height: 8px * root.s; }
+                Text {
+                    text: root.desc;
+                    font-size: 16px * root.s;
+                    color: Theme.base-content.transparentize(40%);
+                }
+                Bar {
+                    value: root.desc-pct;
+                    s: root.s;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            padding: 16px * root.s;
+            padding-left: root.icon-pad-left * root.s;
+            Image {
+                source: root.icon;
+                colorize: Theme.primary;
+                width: 64px * root.s;
+                height: 64px * root.s;
+            }
+        }
+    }
+}
+
+component CpuBlock inherits StatBlock {
+    icon: @image-url("icons/cpu.svg");
+    temp-max: 95;
+    gauge-gap: 4px;
+    icon-pad-left: 24px;
+}
+
+component GpuBlock inherits StatBlock {
+    icon: @image-url("icons/gpu.svg");
+    temp-max: 110;
+    gauge-gap: 8px;
+    value-note-size: 14px;
+}
+
+component PillButton inherits TouchArea {
+    in property <image> icon;
+    width: 24px;
+    height: 24px;
+    mouse-cursor: pointer;
+    Rectangle {
+        border-radius: self.height / 2;
+        background: root.has-hover ? Theme.base-content.transparentize(85%) : transparent;
+    }
+    Image {
+        source: root.icon;
+        colorize: Theme.base-content.transparentize(20%);
+        width: 14px;
+        height: 14px;
+    }
+}
+
+export component Panel inherits Window {
+    title: "sensorpanel";
+    background: transparent;
+    no-frame: true;
+    default-font-family: "Noto Sans";
+    preferred-width: 1920px;
+    preferred-height: 480px;
+
+    // Layout (from settings.layout)
+    in property <string> position: "left"; // left | right | center | cover
+    in property <bool> horizontal: false;
+    in property <bool> backdrop: true;
+    in property <length> pad-top;
+    in property <length> pad-right;
+    in property <length> pad-bottom;
+    in property <length> pad-left;
+    in property <float> scale: 1;
+    in property <length> offset-x;
+    in property <length> offset-y;
+
+    // Status
+    in property <bool> connected: false;
+    in property <bool> show-controls: false;
+    callback playlist-step(int);
+
+    // Telemetry
+    in property <float> cpu-util;
+    in property <string> cpu-title: "CPU (--W)";
+    in property <string> cpu-temp: "--";
+    in property <string> cpu-pkg;
+    in property <float> cpu-temp-val;
+    in property <color> cpu-temp-color: #3b82f6;
+    in property <string> ram-desc: "RAM --gb/--gb";
+    in property <float> ram-pct;
+
+    in property <float> gpu-util;
+    in property <string> gpu-title: "GPU";
+    in property <string> gpu-hot: "--";
+    in property <string> vram-temp;
+    in property <float> gpu-temp-val;
+    in property <color> gpu-temp-color: #3b82f6;
+    in property <string> gpu-desc: "VRAM --GB";
+    in property <float> vram-pct;
+
+    property <bool> cover: position == "cover";
+    // Base padding before the user's extra padding (see applyOverlayPadding in panel.js).
+    property <length> base-px: cover ? 40px : 32px;
+    property <length> base-py: cover ? 24px : 8px;
+
+    // The overlay slot. It is laid out at `scale`, then shifted so it grows around the centre
+    // of its unscaled box, matching CSS `transform: translate(..) scale(..)` with origin centre.
+    slot := Rectangle {
+        property <length> content-w: root.horizontal ? hl.preferred-width : vl.preferred-width;
+        property <length> natural-w: root.cover ? root.width : self.content-w / root.scale;
+        property <length> natural-x: root.position == "right" ? root.width - self.natural-w
+            : root.position == "center" ? (root.width - self.natural-w) / 2
+            : 0;
+        width: root.cover ? root.width * root.scale : self.content-w;
+        height: root.height * root.scale;
+        x: self.natural-x + (self.natural-w - self.width) / 2 + root.offset-x;
+        y: (root.height - self.height) / 2 + root.offset-y;
+        border-radius: root.cover ? 0 : 16px * root.scale;
+        // Rasterise the overlay once and reuse it across video frames; it only changes on
+        // telemetry ticks (1 Hz) instead of every frame.
+        cache-rendering-hint: true;
+        background: !root.backdrop ? transparent : root.cover ? #ffffff40 : #ffffff59;
+
+        vl := VerticalLayout {
+            visible: !root.horizontal;
+            width: 100%;
+            height: 100%;
+            alignment: center;
+            spacing: 24px * root.scale;
+            padding-top: (root.base-py + root.pad-top) * root.scale;
+            padding-bottom: (root.base-py + root.pad-bottom) * root.scale;
+            padding-left: (root.base-px + root.pad-left) * root.scale;
+            padding-right: (root.base-px + root.pad-right) * root.scale;
+            CpuBlock {
+                s: root.scale;
+                util: root.cpu-util;
+                title: root.cpu-title;
+                value: root.cpu-temp;
+                value-note: root.cpu-pkg;
+                temp: root.cpu-temp-val;
+                temp-color: root.cpu-temp-color;
+                desc: root.ram-desc;
+                desc-pct: root.ram-pct;
+            }
+            GpuBlock {
+                s: root.scale;
+                util: root.gpu-util;
+                title: root.gpu-title;
+                value: root.gpu-hot;
+                value-note: root.vram-temp;
+                temp: root.gpu-temp-val;
+                temp-color: root.gpu-temp-color;
+                desc: root.gpu-desc;
+                desc-pct: root.vram-pct;
+            }
+        }
+
+        hl := HorizontalLayout {
+            visible: root.horizontal;
+            width: 100%;
+            height: 100%;
+            alignment: center;
+            spacing: 24px * root.scale;
+            padding-top: (root.base-py + root.pad-top) * root.scale;
+            padding-bottom: (root.base-py + root.pad-bottom) * root.scale;
+            padding-left: (root.base-px + root.pad-left) * root.scale;
+            padding-right: (root.base-px + root.pad-right) * root.scale;
+            VerticalLayout {
+                alignment: center;
+                CpuBlock {
+                    s: root.scale;
+                    util: root.cpu-util;
+                    title: root.cpu-title;
+                    value: root.cpu-temp;
+                    value-note: root.cpu-pkg;
+                    temp: root.cpu-temp-val;
+                    temp-color: root.cpu-temp-color;
+                    desc: root.ram-desc;
+                    desc-pct: root.ram-pct;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                GpuBlock {
+                    s: root.scale;
+                    util: root.gpu-util;
+                    title: root.gpu-title;
+                    value: root.gpu-hot;
+                    value-note: root.vram-temp;
+                    temp: root.gpu-temp-val;
+                    temp-color: root.gpu-temp-color;
+                    desc: root.gpu-desc;
+                    desc-pct: root.vram-pct;
+                }
+            }
+        }
+    }
+
+    // Connection pill (bottom-left), with daisyUI's `animate-ping` halo while live.
+    Rectangle {
+        x: 16px;
+        y: root.height - self.height - 16px;
+        width: pill.preferred-width;
+        height: pill.preferred-height;
+        border-radius: self.height / 2;
+        background: Theme.base-200.transparentize(75%);
+
+        pill := HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+            spacing: 8px;
+
+            Rectangle {
+                width: 12px;
+                height: 12px;
+                property <color> dot: root.connected ? Theme.success : #f59e0b;
+                property <float> t: root.connected ? mod(animation-tick() / 1s, 1) : 0;
+
+                Rectangle {
+                    width: 12px * (1 + parent.t);
+                    height: self.width;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: self.width / 2;
+                    background: parent.dot;
+                    opacity: 0.6 * (1 - parent.t);
+                }
+                Rectangle {
+                    border-radius: self.width / 2;
+                    background: parent.dot;
+                }
+            }
+
+            Text {
+                text: root.connected ? "live" : "reconnecting";
+                font-size: 12px;
+                font-weight: 500;
+                color: Theme.base-content.transparentize(20%);
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Playlist prev/next (bottom-right), only for multi-video playlists.
+    if root.show-controls: Rectangle {
+        x: root.width - self.width - 16px;
+        y: root.height - self.height - 16px;
+        width: controls.preferred-width;
+        height: controls.preferred-height;
+        border-radius: self.height / 2;
+        background: Theme.base-200.transparentize(75%);
+
+        controls := HorizontalLayout {
+            padding: 6px;
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 8px;
+            PillButton {
+                icon: @image-url("icons/chevron-left.svg");
+                clicked => { root.playlist-step(-1); }
+            }
+            PillButton {
+                icon: @image-url("icons/chevron-right.svg");
+                clicked => { root.playlist-step(1); }
+            }
+        }
+    }
+}

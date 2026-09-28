@@ -162,6 +162,35 @@ windowrule = match:class ^(chromium-sensor-panel)$, workspace 15 silent
 
 Adjust workspace number and monitor name to match your setup (`hyprctl monitors`).
 
+### Native client (experimental)
+
+`client/` is a single native binary that replaces the kiosk Chromium window. It plays the playlist with libmpv, hardware-decoded through VA-API, and draws the same overlay with Slint on top, in one window. It reads settings and telemetry from the server exactly like the web panel, and uses about a quarter of Chromium's memory and CPU. See [client/README.md](client/README.md) for how it works and the numbers.
+
+```bash
+make client-build      # needs libmpv (mpv package) and yt-dlp
+make client-run        # windowed, against http://127.0.0.1:9070
+make client-install    # -> ~/.local/bin/sensorpanel-client
+```
+
+Hyprland (Lua config) — swap the Chromium launch for:
+
+```lua
+-- `silent` keeps focus on your main monitor. Don't add no_initial_focus:
+-- Hyprland then drops the fullscreen state and tiles the window.
+hl.window_rule({
+    match = { class = "^(sensorpanel-client)$" },
+    tag = "+sensorpanel",
+    workspace = "15 silent",
+    fullscreen = true,
+})
+
+-- Restarts a running instance, so the launch keybind doubles as "reload panel".
+-- (pkill matches the kernel's 15-char process name.)
+function SensorPanelClient()
+    hl.exec_cmd("pkill -x sensorpanel-cli; exec sensorpanel-client")
+end
+```
+
 ---
 
 ## Development Quick Start
