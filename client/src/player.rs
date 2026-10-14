@@ -12,6 +12,39 @@ use std::time::{Duration, Instant};
 const DEFAULT_VIDEO_ID: &str = "AKfsikEXZHM";
 const IDLE_PROP_ID: u64 = 1;
 const CACHE_PROP_ID: u64 = 2;
+/// More playback restarts than this within `SPIN_WINDOW` means mpv is spinning (see `SpinGuard`).
+const SPIN_RESTARTS: u32 = 10;
+const SPIN_WINDOW: Duration = Duration::from_secs(1);
+/// Spinning again this soon after reopening the same entry: the video itself is broken, skip it.
+const RESPIN_WINDOW: Duration = Duration::from_secs(60);
+
+/// Detects mpv restarting playback in a tight loop. Under `loop-file` mpv loops by seeking back
+/// on the stream it already has; once that stream dies (googlevideo URLs expire ~6 h after yt-dlp
+/// resolved them) every seek hits EOF at once and mpv loops thousands of times a second, flooding
+/// every client and Lua script with events. A healthy loop restarts once per video length.
+#[derive(Default)]
+struct SpinGuard {
+    window_start: Option<Instant>,
+    count: u32,
+    /// Fired already: ignore the restarts still queued until the next file starts.
+    tripped: bool,
+}
+
+impl SpinGuard {
+    /// Count a restart; true exactly once per file when the rate says mpv is spinning.
+    fn on_restart(&mut self, now: Instant) -> bool {
+        if self.tripped {
+            return false;
+        }
+        if self.window_start.is_none_or(|start| now - start > SPIN_WINDOW) {
+            self.window_start = Some(now);
+            self.count = 0;
+        }
+        self.count += 1;
+        self.tripped = self.count > SPIN_RESTARTS;
+        self.tripped
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
@@ -164,6 +197,9 @@ struct State {
     /// Direction of the last navigation (-1 = prev). mpv always skips a broken entry
     /// forwards, so going back past one needs our help.
     backwards: bool,
+    spin: SpinGuard,
+    /// Last entry reopened because it was spinning, and when.
+    last_reopen: Option<(usize, Instant)>,
 }
 
 impl State {
@@ -291,6 +327,7 @@ impl Player {
     fn on_start_file(&self) {
         let pos = self.mpv.get_property::<i64>("playlist-pos").unwrap_or(-1);
         let mut state = self.state.lock().unwrap();
+        state.spin = SpinGuard::default();
         let Some((index, entry)) = state.entry(pos) else { return };
         state.loading = Some((index, Instant::now()));
         let total = state.entries.len();
@@ -325,10 +362,17 @@ impl Player {
         }
     }
 
-    /// First frame after a file start (also fires after seeks/loops, which are ignored).
+    /// First frame after a file start (also fires after seeks/loops, which are only watched for
+    /// spinning).
     fn on_playback_restart(&self) {
         let mut state = self.state.lock().unwrap();
-        let Some((index, since)) = state.loading.take() else { return };
+        let Some((index, since)) = state.loading.take() else {
+            if state.spin.on_restart(Instant::now()) {
+                drop(state);
+                self.on_spin();
+            }
+            return;
+        };
         state.failures = 0;
         state.backwards = false;
         let Some(entry) = state.entries.get(index).cloned() else { return };
@@ -336,6 +380,31 @@ impl Player {
         drop(state);
         eprintln!("player: first frame #{index} after {:.1?}", since.elapsed());
         self.emit(Status::Playing { index, total, entry });
+    }
+
+    /// The stream died under mpv (see `SpinGuard`). Reopening the entry has ytdl_hook resolve a
+    /// fresh stream URL; if it spins again right away, skip to the next entry instead.
+    fn on_spin(&self) {
+        let pos = self.mpv.get_property::<i64>("playlist-pos").unwrap_or(-1);
+        let mut state = self.state.lock().unwrap();
+        let Some((index, entry)) = state.entry(pos) else { return };
+        let total = state.entries.len();
+        let now = Instant::now();
+        let again = matches!(state.last_reopen, Some((i, t)) if i == index && now - t < RESPIN_WINDOW);
+        state.last_reopen = Some((index, now));
+        drop(state);
+        let target = if again && total > 1 {
+            eprintln!("player: #{index} {} keeps spinning after reopen, skipping", entry.video_id);
+            self.emit(Status::Failed { entry: Some(entry) });
+            (index + 1) % total
+        } else {
+            eprintln!("player: #{index} {} stream died (restart loop), reopening", entry.video_id);
+            index
+        };
+        // Not `playlist-pos`: setting it to the current index doesn't reopen the file.
+        if let Err(e) = self.mpv.command("playlist-play-index", &[&target.to_string()]) {
+            eprintln!("mpv: playlist-play-index {target}: {e}");
+        }
     }
 
     fn on_load_error(&self, err: &libmpv2::Error) {
@@ -479,6 +548,27 @@ mod tests {
     fn video_mode_falls_back_to_default() {
         let (entries, start) = build_entries(&Config::default());
         assert_eq!((entries[0].video_id.as_str(), start), (DEFAULT_VIDEO_ID, 0));
+    }
+
+    #[test]
+    fn spin_guard_ignores_normal_loops() {
+        let t0 = Instant::now();
+        let mut guard = SpinGuard::default();
+        // A short 3 s wallpaper looping for an hour.
+        assert!((0..1200).all(|i| !guard.on_restart(t0 + Duration::from_secs(3 * i))));
+        // A few restarts close together (start + a seek) are fine too.
+        assert!((0..SPIN_RESTARTS).all(|_| !guard.on_restart(t0 + Duration::from_secs(4000))));
+    }
+
+    #[test]
+    fn spin_guard_trips_once_until_reset() {
+        let t0 = Instant::now();
+        let mut guard = SpinGuard::default();
+        let fired = (0..5000).filter(|i| guard.on_restart(t0 + Duration::from_micros(30 * i))).count();
+        assert_eq!(fired, 1);
+        assert!(!guard.on_restart(t0 + Duration::from_secs(10)), "stays quiet until the next file");
+        guard = SpinGuard::default();
+        assert!((0..=SPIN_RESTARTS).any(|_| guard.on_restart(t0)));
     }
 
     #[test]
