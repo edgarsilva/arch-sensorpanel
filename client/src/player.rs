@@ -320,6 +320,22 @@ impl Player {
         self.play_index((pos + delta).rem_euclid(total));
     }
 
+    /// The playlist in mpv's order (for the playlist picker).
+    pub fn entries(&self) -> Vec<Entry> {
+        self.state.lock().unwrap().entries.clone()
+    }
+
+    /// Jump straight to `index` (the playlist picker).
+    pub fn select(&self, index: usize) {
+        let mut state = self.state.lock().unwrap();
+        if index >= state.entries.len() {
+            return;
+        }
+        state.backwards = false;
+        drop(state);
+        self.play_index(index as i64);
+    }
+
     fn play_index(&self, index: i64) {
         if let Err(e) = self.mpv.set_property("playlist-pos", index) {
             eprintln!("mpv: playlist-pos={index}: {e}");

@@ -205,21 +205,29 @@ component GpuBlock inherits StatBlock {
     value-note-size: 14px;
 }
 
+// One row of the playlist picker.
+export struct PlaylistItem {
+    title: string,
+    thumb: image,
+}
+
 component PillButton inherits TouchArea {
     in property <image> icon;
+    // Icon colour; the hover/press disc is a fainter shade of it.
+    in property <color> tint: Theme.base-content.transparentize(20%);
     width: 24px;
     height: 24px;
     mouse-cursor: pointer;
     Rectangle {
         border-radius: self.height / 2;
-        background: root.pressed ? Theme.base-content.transparentize(65%)
-            : root.has-hover ? Theme.base-content.transparentize(85%)
+        background: root.pressed ? root.tint.transparentize(56%)
+            : root.has-hover ? root.tint.transparentize(81%)
             : transparent;
         animate background { duration: 120ms; }
     }
     Image {
         source: root.icon;
-        colorize: Theme.base-content.transparentize(20%);
+        colorize: root.tint;
         width: root.pressed ? 12px : 14px;
         height: self.width;
         animate width { duration: 80ms; }
@@ -289,6 +297,14 @@ export component Panel inherits Window {
     callback playlist-step(int);
     callback reload();
 
+    // Playlist picker (list button beside prev/next). Rust fills the items when it opens and
+    // drops them when it closes (Slint's image cache may still hold a few MB of thumbnails).
+    in property <[PlaylistItem]> playlist-items;
+    in property <int> playlist-current: -1;
+    in property <bool> playlist-open: false;
+    callback playlist-show(bool);
+    callback playlist-select(int);
+
     // Player status: "" (playing) | starting | loading | buffering | retrying
     in property <string> status-kind: "starting";
     in property <string> status-title: "Starting…";
@@ -303,10 +319,14 @@ export component Panel inherits Window {
     forward-focus: keys;
     keys := FocusScope {
         // While the panel has focus: F5 re-fetches settings and reloads the current video,
-        // ←/→ step through the playlist like the prev/next buttons.
+        // ←/→ step through the playlist like the prev/next buttons, Esc closes the playlist picker.
         key-pressed(event) => {
             if event.text == Key.F5 {
                 root.reload();
+                return accept;
+            }
+            if root.playlist-open && event.text == Key.Escape {
+                root.playlist-show(false);
                 return accept;
             }
             if root.show-controls && event.text == Key.LeftArrow {
@@ -601,9 +621,147 @@ export component Panel inherits Window {
                 clicked => { root.playlist-step(-1); }
             }
             PillButton {
+                icon: @image-url("icons/list.svg");
+                clicked => { root.playlist-show(!root.playlist-open); }
+            }
+            PillButton {
                 icon: @image-url("icons/chevron-right.svg");
                 clicked => { root.playlist-step(1); }
             }
+        }
+    }
+
+    // Playlist picker. A click anywhere outside the card closes it (including on the pill,
+    // so the list button toggles it).
+    if root.playlist-open && root.show-controls: TouchArea {
+        clicked => { root.playlist-show(false); }
+    }
+    if root.playlist-open && root.show-controls: picker := Rectangle {
+        property <length> row-h: 66px;
+        // Anchored above the prev/next pill (36px tall, 16px from the bottom).
+        width: min(460px, root.width - 32px);
+        height: root.height - 16px - 60px;
+        x: root.width - self.width - 16px;
+        y: 16px;
+        border-radius: 18px;
+        background: #000000c7;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000066;
+        clip: true;
+
+        // Swallow clicks on the card itself so they don't reach the close-on-outside area.
+        TouchArea { }
+
+        VerticalLayout {
+            padding: 10px;
+            padding-top: 10px;
+            spacing: 6px;
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 2px;
+                spacing: 8px;
+                Text {
+                    text: "Playlist";
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: white;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "\{root.playlist-items.length} videos";
+                    font-size: 13px;
+                    color: #ffffff99;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                PillButton {
+                    icon: @image-url("icons/x.svg");
+                    tint: #ffffffcc;
+                    clicked => { root.playlist-show(false); }
+                }
+            }
+
+            list := Flickable {
+                content-height: root.playlist-items.length * picker.row-h;
+                // Open on the playing entry, centred where possible.
+                init => {
+                    self.content-y = -clamp(root.playlist-current * picker.row-h - (self.height - picker.row-h) / 2,
+                        0px, max(0px, self.content-height - self.height));
+                }
+
+                for item[i] in root.playlist-items: row := TouchArea {
+                    property <bool> current: i == root.playlist-current;
+                    y: i * picker.row-h;
+                    width: list.content-width;
+                    height: picker.row-h;
+                    mouse-cursor: pointer;
+                    clicked => { root.playlist-select(i); }
+
+                    Rectangle {
+                        x: 2px;
+                        y: 2px;
+                        width: parent.width - 4px;
+                        height: parent.height - 4px;
+                        border-radius: 10px;
+                        background: row.current ? #ffffff2e
+                            : row.pressed ? #ffffff24
+                            : row.has-hover ? #ffffff14
+                            : transparent;
+                        animate background { duration: 120ms; }
+                    }
+
+                    HorizontalLayout {
+                        padding: 6px;
+                        padding-left: 8px;
+                        padding-right: 14px;
+                        spacing: 12px;
+
+                        Rectangle {
+                            width: 96px;
+                            height: 54px;
+                            border-radius: 6px;
+                            clip: true;
+                            background: #ffffff14;
+                            Image {
+                                width: 100%;
+                                height: 100%;
+                                source: item.thumb;
+                                image-fit: ImageFit.cover;
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: item.title;
+                                font-size: 14px;
+                                font-weight: row.current ? 600 : 400;
+                                color: white;
+                                wrap: word-wrap;
+                                overflow: elide;
+                                max-height: 36px;
+                            }
+                            Text {
+                                text: row.current ? "\{i + 1} · Now playing" : "\{i + 1}";
+                                font-size: 12px;
+                                color: row.current ? Theme.success : #ffffff8c;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Scroll position hint when the list is longer than the card.
+        if list.content-height > list.height: Rectangle {
+            property <float> shown: list.height / list.content-height;
+            x: parent.width - 6px;
+            y: list.y + (-list.content-y / list.content-height) * list.height;
+            width: 3px;
+            height: list.height * self.shown;
+            border-radius: 1.5px;
+            background: #ffffff40;
         }
     }
 }

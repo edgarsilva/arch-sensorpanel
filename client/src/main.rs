@@ -2,6 +2,7 @@
 //! (OpenGL underlay) and the telemetry overlay with Slint on top.
 
 mod player;
+mod playlist;
 mod server;
 mod status;
 mod telemetry;
@@ -91,6 +92,22 @@ fn main() -> Result<()> {
     ui.on_playlist_step({
         let player = player.clone();
         move |delta| player.next(delta.into())
+    });
+    ui.on_playlist_show({
+        let (player, server, weak) = (player.clone(), server.clone(), ui.as_weak());
+        move |open| {
+            let Some(ui) = weak.upgrade() else { return };
+            if open { playlist::open(&ui, &server, player.entries()) } else { playlist::close(&ui) }
+        }
+    });
+    ui.on_playlist_select({
+        let (player, weak) = (player.clone(), ui.as_weak());
+        move |index| {
+            if let Some(ui) = weak.upgrade() {
+                playlist::close(&ui);
+            }
+            player.select(index as usize);
+        }
     });
 
     let weak = ui.as_weak();

@@ -17,7 +17,7 @@ thread_local! {
     static POSTER_ID: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
-fn title(entry: &Entry) -> String {
+pub(crate) fn title(entry: &Entry) -> String {
     let clean = crate::title::clean(&entry.label);
     if clean.is_empty() { entry.video_id.clone() } else { clean }
 }
@@ -62,6 +62,7 @@ pub fn handler(server: Server, weak: slint::Weak<Panel>) -> impl Fn(Status) + Se
 fn apply(ui: &Panel, status: Status) {
     match status {
         Status::Loading { index, total, entry } => {
+            ui.set_playlist_current(index as i32);
             ui.set_status_kind("loading".into());
             ui.set_status_title(title(&entry).into());
             ui.set_status_detail(position(index, total).into());
@@ -98,28 +99,34 @@ fn apply(ui: &Panel, status: Status) {
     }
 }
 
-fn thumb_path(video_id: &str) -> Option<PathBuf> {
+fn thumb_path(file: &str) -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))?;
     let dir = base.join("sensorpanel").join("thumbs");
     std::fs::create_dir_all(&dir).ok()?;
-    Some(dir.join(format!("{video_id}.jpg")))
+    Some(dir.join(file))
+}
+
+/// Cached YouTube thumbnail, downloaded on first use: the first of `variants` (i.ytimg.com
+/// names, e.g. "hqdefault") that exists, stored as `file`. Blocks, so call it off the UI thread.
+pub(crate) fn thumbnail(server: &Server, video_id: &str, variants: &[&str], file: &str) -> Option<PathBuf> {
+    let path = thumb_path(file)?;
+    let ok = path.exists()
+        || variants.iter().any(|name| {
+            server.download(&format!("https://i.ytimg.com/vi/{video_id}/{name}.jpg"), &path).is_ok()
+        });
+    ok.then_some(path)
 }
 
 /// Fetch (or reuse the cached) YouTube thumbnail and show it if that video is still loading.
 fn fetch_poster(server: Server, weak: slint::Weak<Panel>, video_id: String) {
     thread::spawn(move || {
-        let Some(path) = thumb_path(&video_id) else { return };
-        if !path.exists() {
-            // maxresdefault is missing for some uploads; hqdefault always exists.
-            let ok = ["maxresdefault", "hqdefault"].iter().any(|name| {
-                server.download(&format!("https://i.ytimg.com/vi/{video_id}/{name}.jpg"), &path).is_ok()
-            });
-            if !ok {
-                return eprintln!("poster: no thumbnail for {video_id}");
-            }
-        }
+        // maxresdefault is missing for some uploads; hqdefault always exists.
+        let file = format!("{video_id}.jpg");
+        let Some(path) = thumbnail(&server, &video_id, &["maxresdefault", "hqdefault"], &file) else {
+            return eprintln!("poster: no thumbnail for {video_id}");
+        };
         let _ = weak.upgrade_in_event_loop(move |ui| {
             if POSTER_ID.with(|id| *id.borrow() != video_id) {
                 return;
