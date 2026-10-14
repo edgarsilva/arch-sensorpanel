@@ -16,7 +16,7 @@ use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
 use slint::winit_030::winit::window::Fullscreen;
 use slint::{ComponentHandle, GraphicsAPI, RenderingState};
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{c_char, c_int, c_void, CString};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -30,6 +30,15 @@ const APP_ID: &str = "sensorpanel-client";
 unsafe extern "C" {
     fn eglGetProcAddress(name: *const c_char) -> *mut c_void;
 }
+
+unsafe extern "C" {
+    fn mallopt(param: c_int, value: c_int) -> c_int;
+}
+
+/// glibc's M_ARENA_MAX. Every video (re)load starts a new mpv demux thread, which can land in a
+/// new malloc arena (up to 8 per core: 256 here), and arenas keep the ~32 MiB demuxer cache after
+/// it's freed: RSS grew ~30-40 MB per load. Capped at two, the arenas reuse that memory instead.
+const M_ARENA_MAX: c_int = -8;
 
 /// mpv 0.41 leaks one GL fence per rendered frame through the render API: it queues them for a
 /// swap_buffers that libmpv never calls (mpv#17217, fixed upstream in f74adc424, unreleased).
@@ -51,6 +60,8 @@ fn gl_proc_address(_: &(), name: &str) -> *mut c_void {
 }
 
 fn main() -> Result<()> {
+    // Before any thread exists (Slint, mpv), so no extra arenas get created first.
+    unsafe { mallopt(M_ARENA_MAX, 2) };
     let windowed = std::env::args().any(|a| a == "--windowed");
     let base_url = std::env::var("SENSORPANEL_URL").unwrap_or_else(|_| "http://127.0.0.1:9070".into());
     let server = Server::new(&base_url);
