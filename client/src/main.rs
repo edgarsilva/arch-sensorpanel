@@ -31,9 +31,21 @@ unsafe extern "C" {
     fn eglGetProcAddress(name: *const c_char) -> *mut c_void;
 }
 
+/// mpv 0.41 leaks one GL fence per rendered frame through the render API: it queues them for a
+/// swap_buffers that libmpv never calls (mpv#17217, fixed upstream in f74adc424, unreleased).
+/// Handing mpv a glFenceSync that creates no fence skips the queueing. Its only other user is
+/// direct-rendering upload buffers, which player.rs turns off (vd-lavc-dr=no).
+/// Remove once the installed mpv is newer than 0.41.0.
+extern "C" fn no_fence_sync(_condition: u32, _flags: u32) -> *mut c_void {
+    std::ptr::null_mut()
+}
+
 /// Slint's winit/femtovg renderer drives an EGL context on Wayland, so mpv can resolve GL
 /// entry points straight from EGL (Mesa returns core functions too).
 fn gl_proc_address(_: &(), name: &str) -> *mut c_void {
+    if name == "glFenceSync" {
+        return no_fence_sync as *const () as *mut c_void;
+    }
     let Ok(name) = CString::new(name) else { return std::ptr::null_mut() };
     unsafe { eglGetProcAddress(name.as_ptr()) }
 }

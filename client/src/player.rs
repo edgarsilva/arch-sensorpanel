@@ -221,6 +221,8 @@ impl Player {
         let mpv = Mpv::with_initializer(|init| {
             init.set_option("vo", "libmpv")?;
             init.set_option("hwdec", "vaapi,auto-safe")?;
+            // DR upload buffers rely on GL fences, which main.rs stubs out (mpv#17217 workaround).
+            init.set_option("vd-lavc-dr", "no")?;
             init.set_option("aid", "no")?;
             init.set_option("mute", "yes")?;
             init.set_option("ytdl", "yes")?;
