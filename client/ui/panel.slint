@@ -53,8 +53,8 @@ component RadialGauge inherits Rectangle {
     Text {
         text: root.label;
         font-size: 18px * root.s;
-        font-weight: 600;
-        color: Theme.base-content.transparentize(20%);
+        font-weight: 700;
+        color: Theme.base-content.transparentize(10%);
         horizontal-alignment: center;
         vertical-alignment: center;
     }
@@ -127,8 +127,8 @@ component StatBlock inherits HorizontalLayout {
             Text {
                 text: root.title;
                 font-size: 18px * root.s;
-                font-weight: 600;
-                color: Theme.base-content.transparentize(40%);
+                font-weight: 700;
+                color: Theme.base-content.transparentize(10%);
             }
 
             HorizontalLayout {
@@ -144,13 +144,15 @@ component StatBlock inherits HorizontalLayout {
                 Text {
                     text: "°C";
                     font-size: 18px * root.s;
+                    font-weight: 700;
                     color: Theme.base-content;
                     vertical-alignment: top;
                 }
                 Text {
                     text: root.value-note;
                     font-size: root.value-note-size * root.s;
-                    color: Theme.base-content.transparentize(35%);
+                    font-weight: 600;
+                    color: Theme.base-content.transparentize(10%);
                     vertical-alignment: top;
                 }
             }
@@ -168,7 +170,8 @@ component StatBlock inherits HorizontalLayout {
                 Text {
                     text: root.desc;
                     font-size: 16px * root.s;
-                    color: Theme.base-content.transparentize(40%);
+                    font-weight: 600;
+                    color: Theme.base-content.transparentize(10%);
                 }
                 Bar {
                     value: root.desc-pct;
@@ -275,7 +278,7 @@ export component Panel inherits Window {
     title: "sensorpanel";
     background: transparent;
     no-frame: true;
-    default-font-family: "Noto Sans";
+    default-font-family: "Inter";
     preferred-width: 1920px;
     preferred-height: 480px;
 
