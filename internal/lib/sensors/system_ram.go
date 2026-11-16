@@ -59,6 +59,8 @@ func readMemorySnapshot() (SystemRAMSnapshot, error) {
 		return SystemRAMSnapshot{}, err
 	}
 
+	availKB = addGPUReclaim(totalKB, availKB, readGPUReclaimKB("/proc/vmstat"))
+
 	totalGB := float64(totalKB) / (1024.0 * 1024.0)
 	availGB := float64(availKB) / (1024.0 * 1024.0)
 	usedGB := totalGB - availGB
@@ -107,6 +109,45 @@ func readMemInfo() (totalKB uint64, availKB uint64, err error) {
 	}
 
 	return totalKB, availKB, nil
+}
+
+// addGPUReclaim adds the amdgpu reclaim pool to available memory, capped at
+// total. MemAvailable does not count it, so without this the pool reads as used.
+func addGPUReclaim(totalKB, availKB, gpuReclaimKB uint64) uint64 {
+	if availKB+gpuReclaimKB > totalKB {
+		return totalKB
+	}
+
+	return availKB + gpuReclaimKB
+}
+
+// readGPUReclaimKB returns the size of the amdgpu/TTM freed-page pool
+// (nr_gpu_reclaim in /proc/vmstat, kernel 7.2+) in KiB. The pool is
+// reclaimable, but the kernel leaves it out of MemAvailable. It returns 0 when
+// the file or the counter is missing, such as on older kernels.
+func readGPUReclaimKB(path string) uint64 {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) != 2 || fields[0] != "nr_gpu_reclaim" {
+			continue
+		}
+
+		pages, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			return 0
+		}
+
+		return pages * 4 // vmstat counts 4 KiB pages
+	}
+
+	return 0
 }
 
 func parseMemInfoKB(line string) uint64 {
