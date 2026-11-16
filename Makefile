@@ -18,9 +18,7 @@ build: ## Build binary into bin/
 	go build -o $(BIN_DIR)/$(BINARY) ./cmd/app
 
 install: build ## Build and copy binary to ~/.local/bin
-	@mkdir -p $(INSTALL_DIR)
-	cp $(BIN_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)
-	@chmod +x $(INSTALL_DIR)/$(BINARY)
+	install -D -m 0755 $(BIN_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)
 	@echo "Installed $(BINARY) to $(INSTALL_DIR)/$(BINARY)"
 
 ##@ Dev
